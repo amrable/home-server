@@ -10,6 +10,6 @@ amr-cloud.tail80ea1b.ts.net {
     }
  
     handle /immich* {
-        reverse_proxy immich-server:3001
+        reverse_proxy immich-server:2283
     }
 }
