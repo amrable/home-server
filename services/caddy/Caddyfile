@@ -1,6 +1,10 @@
 amr-cloud.tail80ea1b.ts.net {
     tls /certs/amr-cloud.tail80ea1b.ts.net.crt /certs/amr-cloud.tail80ea1b.ts.net.key
 
+    handle /vault* {
+        reverse_proxy vaultwarden:80
+    }
+
     handle /jellyfin* {
         reverse_proxy jellyfin:8096
     }
