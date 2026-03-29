@@ -1,0 +1,16 @@
+networks:
+  homeserver:
+    external: true
+    name: homeserver
+
+services:
+  vaultwarden:
+    image: vaultwarden/server:latest
+    restart: unless-stopped
+    environment:
+      DOMAIN: https://${DOMAIN}/vaultwarden
+      ADMIN_TOKEN: ${VAULTWARDEN_ADMIN_TOKEN}
+    volumes:
+      - ${DATA_PATH}/vaultwarden:/data
+    networks:
+      - homeserver

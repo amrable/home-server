@@ -8,4 +8,8 @@ amr-cloud.tail80ea1b.ts.net {
     handle {
         reverse_proxy nextcloud:80
     }
+
+    handle /vaultwarden* {
+        reverse_proxy vaultwarden:80
+    }
 }
