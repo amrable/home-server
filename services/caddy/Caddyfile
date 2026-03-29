@@ -1,3 +1,15 @@
+amr-cloud.tail80ea1b.ts.net:8096 {
+    tls /certs/amr-cloud.tail80ea1b.ts.net.crt /certs/amr-cloud.tail80ea1b.ts.net.key
+
+    reverse_proxy jellyfin:8096
+}
+
+amr-cloud.tail80ea1b.ts.net:2283 {
+    tls /certs/amr-cloud.tail80ea1b.ts.net.crt /certs/amr-cloud.tail80ea1b.ts.net.key
+
+    reverse_proxy immich-server:2283
+}
+
 amr-cloud.tail80ea1b.ts.net:8443 {
     tls /certs/amr-cloud.tail80ea1b.ts.net.crt /certs/amr-cloud.tail80ea1b.ts.net.key
 
@@ -7,11 +19,5 @@ amr-cloud.tail80ea1b.ts.net:8443 {
 amr-cloud.tail80ea1b.ts.net {
     tls /certs/amr-cloud.tail80ea1b.ts.net.crt /certs/amr-cloud.tail80ea1b.ts.net.key
 
-    handle /jellyfin* {
-        reverse_proxy jellyfin:8096
-    }
-
-    handle {
-        reverse_proxy nextcloud:80
-    }
+    reverse_proxy nextcloud:80
 }
