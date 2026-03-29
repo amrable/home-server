@@ -7,10 +7,8 @@ services:
   vaultwarden:
     image: vaultwarden/server:latest
     restart: unless-stopped
-    ports:
-      - "8080:80"
     environment:
-      DOMAIN: http://${DOMAIN}:8080
+      DOMAIN: https://vaultwarden.amr-cloud.tail80ea1b.ts.net
       ADMIN_TOKEN: ${VAULTWARDEN_ADMIN_TOKEN}
     volumes:
       - ${DATA_PATH}/vaultwarden:/data

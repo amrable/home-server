@@ -12,8 +12,8 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
-      - /home/amr:/certs:ro
       - ${DATA_PATH}/caddy/data:/data
       - ${DATA_PATH}/caddy/config:/config
+      - /var/run/tailscale/tailscaled.sock:/var/run/tailscale/tailscaled.sock
     networks:
       - homeserver
