@@ -1,0 +1,40 @@
+networks:
+  homeserver:
+    external: true
+    name: homeserver
+
+services:
+  immich-server:
+    image: ghcr.io/immich-app/immich-server:release
+    restart: unless-stopped
+    depends_on:
+      - immich-redis
+      - immich-postgres
+    environment:
+      DB_HOSTNAME: immich-postgres
+      DB_USERNAME: ${IMMICH_DB_USERNAME}
+      DB_PASSWORD: ${IMMICH_DB_PASSWORD}
+      DB_DATABASE_NAME: ${IMMICH_DB_DATABASE}
+      REDIS_HOSTNAME: immich-redis
+    volumes:
+      - ${DATA_PATH}/immich/upload:/usr/src/app/upload
+    networks:
+      - homeserver
+
+  immich-redis:
+    image: redis:6-alpine
+    restart: unless-stopped
+    networks:
+      - homeserver
+
+  immich-postgres:
+    image: tensorchord/pgvecto-rs:pg14-v0.2.0
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${IMMICH_DB_USERNAME}
+      POSTGRES_PASSWORD: ${IMMICH_DB_PASSWORD}
+      POSTGRES_DB: ${IMMICH_DB_DATABASE}
+    volumes:
+      - ${DATA_PATH}/immich/db:/var/lib/postgresql/data
+    networks:
+      - homeserver
