@@ -10,7 +10,7 @@ services:
     ports:
       - "8080:80"
     environment:
-      DOMAIN: https://${DOMAIN}/vault
+      DOMAIN: https://${DOMAIN}:8443
       ADMIN_TOKEN: ${VAULTWARDEN_ADMIN_TOKEN}
     volumes:
       - ${DATA_PATH}/vaultwarden:/data
