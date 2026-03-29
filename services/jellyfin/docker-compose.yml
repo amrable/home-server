@@ -10,5 +10,6 @@ services:
     volumes:
       - ${DATA_PATH}/jellyfin/config:/config
       - ${DATA_PATH}/media:/media
+      - ./network.xml:/config/config/network.xml
     networks:
       - homeserver
