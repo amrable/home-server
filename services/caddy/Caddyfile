@@ -1,0 +1,11 @@
+amr-cloud.tail80ea1b.ts.net {
+    tls /certs/amr-cloud.tail80ea1b.ts.net.crt /certs/amr-cloud.tail80ea1b.ts.net.key
+
+    handle /jellyfin* {
+        reverse_proxy jellyfin:8096
+    }
+
+    handle {
+        reverse_proxy nextcloud:80
+    }
+}

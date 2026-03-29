@@ -1,0 +1,4 @@
+networks:
+  homeserver:
+    external: false
+    name: homeserver

@@ -1,0 +1,19 @@
+networks:
+  homeserver:
+    external: true
+    name: homeserver
+
+services:
+  caddy:
+    image: caddy:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - /home/amr:/certs:ro
+      - ${DATA_PATH}/caddy/data:/data
+      - ${DATA_PATH}/caddy/config:/config
+    networks:
+      - homeserver
