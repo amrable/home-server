@@ -1,0 +1,17 @@
+networks:
+  homeserver:
+    external: true
+    name: homeserver
+
+services:
+  hermes:
+    image: nousresearch/hermes-agent:latest
+    container_name: hermes
+    restart: unless-stopped
+    volumes:
+      - ~/.hermes:/opt/data
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    command: gateway run
+    networks:
+      - homeserver
