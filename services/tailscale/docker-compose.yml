@@ -14,10 +14,12 @@ services:
       TS_STATE_DIR: /var/lib/tailscale
       TS_USERSPACE: "false"
       TS_EXTRA_ARGS: --reset --advertise-routes=${HOMESERVER_SUBNET}
+      TS_SERVE_CONFIG: /config/serve.json
     sysctls:
       - net.ipv4.ip_forward=1
     volumes:
       - ${DATA_PATH}/tailscale/state:/var/lib/tailscale
+      - ./serve.json:/config/serve.json:ro
       - /dev/net/tun:/dev/net/tun
     cap_add:
       - NET_ADMIN
