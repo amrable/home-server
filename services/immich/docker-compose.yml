@@ -6,7 +6,7 @@ networks:
 services:
   immich-server:
     image: ghcr.io/immich-app/immich-server:release
-    container_name: immich-server
+    container_name: immich
     restart: unless-stopped
     depends_on:
       - immich-redis

@@ -23,7 +23,7 @@ Cloudflare edge (TLS, WAF, DDoS protection)
       │
       ├── nextcloud.amrhost.de  → http://nextcloud           (port 80)
       ├── jellyfin.amrhost.de   → http://jellyfin:8096
-      ├── immich.amrhost.de     → http://immich-server:2283
+      ├── immich.amrhost.de     → http://immich:2283
       └── vaultwarden.amrhost.de → http://vaultwarden:80
 ```
 
@@ -59,7 +59,7 @@ Cloudflare edge (TLS, WAF, DDoS protection)
 5. **Add public hostnames** on the tunnel in the dashboard, each pointing at the internal service:
    - `nextcloud.<your-domain>` → `http://nextcloud`
    - `jellyfin.<your-domain>` → `http://jellyfin:8096`
-   - `immich.<your-domain>` → `http://immich-server:2283`
+   - `immich.<your-domain>` → `http://immich:2283`
    - `vaultwarden.<your-domain>` → `http://vaultwarden:80`
 
 ## Configuration
