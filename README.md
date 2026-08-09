@@ -1,37 +1,36 @@
 # Home Server
 
-A self-hosted home server stack running on Docker, exposed securely to the internet with [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) at the edge (TLS, DDoS protection, WAF).
+A self-hosted server stack running on Docker (e.g. Hetzner), accessed privately over a [Tailscale](https://tailscale.com/) VPN. Nothing is exposed to the public internet.
 
 ## Services
 
-| Service | Description | URL |
+| Service | Description | URL (over Tailscale) |
 |---|---|---|
-| [Nextcloud](https://nextcloud.com/) | File storage and sync | `https://nextcloud.amrhost.de` |
-| [Jellyfin](https://jellyfin.org/) | Media server | `https://jellyfin.amrhost.de` |
-| [Immich](https://immich.app/) | Photo and video backup | `https://immich.amrhost.de` |
-| [Vaultwarden](https://github.com/dani-garcia/vaultwarden) | Self-hosted Bitwarden password manager | `https://vaultwarden.amrhost.de` |
+| [Nextcloud](https://nextcloud.com/) | File storage and sync | `http://172.20.0.11` |
+| [Jellyfin](https://jellyfin.org/) | Media server | `http://172.20.0.12:8096` |
+| [Immich](https://immich.app/) | Photo and video backup | `http://172.20.0.13:2283` |
+| [Vaultwarden](https://github.com/dani-garcia/vaultwarden) | Self-hosted Bitwarden password manager | `http://172.20.0.14` |
 
 ## Architecture
 
-All services run in Docker containers on a shared `homeserver` bridge network. `cloudflared` runs a Cloudflare Tunnel connector on the same network and routes traffic to the services by container name. Hostnames are mapped to services in the Cloudflare Zero Trust dashboard, so nothing is exposed to the public internet — even the hostname-to-service mapping lives at Cloudflare's edge.
+All services run in Docker containers on a shared `homeserver` bridge network (`172.20.0.0/24`) with fixed per-service IPs. A `tailscale` container runs on the same host as a **subnet router**, advertising that subnet to your tailnet, so your phone/laptop can reach the services directly over the encrypted WireGuard mesh — no public ports, no TLS-terminating proxy in front.
 
 ```
-Cloudflare edge (TLS, WAF, DDoS protection)
+Your device (Tailscale client)
       │
       ▼
- cloudflared (outbound tunnel, no inbound ports)
+ tailscale subnet router (advertises 172.20.0.0/24)
       │
-      ├── nextcloud.amrhost.de  → http://nextcloud           (port 80)
-      ├── jellyfin.amrhost.de   → http://jellyfin:8096
-      ├── immich.amrhost.de     → http://immich:2283
-      └── vaultwarden.amrhost.de → http://vaultwarden:80
+      ├── http://172.20.0.11       → Nextcloud
+      ├── http://172.20.0.12:8096  → Jellyfin
+      ├── http://172.20.0.13:2283  → Immich
+      └── http://172.20.0.14       → Vaultwarden
 ```
 
 ## Prerequisites
 
 - Docker & Docker Compose
-- A domain on Cloudflare (DNS proxied through Cloudflare)
-- A [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/) created in the Zero Trust dashboard
+- A [Tailscale](https://tailscale.com/) account
 
 ## Setup
 
@@ -44,36 +43,36 @@ Cloudflare edge (TLS, WAF, DDoS protection)
 2. **Configure environment**
    ```bash
    cp .env.example .env
-   # Set DOMAIN, TUNNEL_TOKEN, and passwords
+   # Set TS_AUTHKEY and passwords
    ```
 
-3. **Create a Cloudflare Tunnel**
-   - In the Zero Trust dashboard → **Networks → Tunnels** → **Create a tunnel** → pick the **Cloudflared** connector type (Docker).
-   - Copy the **Tunnel Token** into `TUNNEL_TOKEN` in `.env`.
+3. **Create a Tailscale auth key**
+   - In the Tailscale admin console → **Settings → Keys** → **Generate auth key**.
+   - Enable **Subnet routes** on the key (required so the container can advertise `172.20.0.0/24`).
+   - Copy the key into `TS_AUTHKEY` in `.env`.
 
 4. **Start all services**
    ```bash
    make up-all
    ```
 
-5. **Add public hostnames** on the tunnel in the dashboard, each pointing at the internal service:
-   - `nextcloud.<your-domain>` → `http://nextcloud`
-   - `jellyfin.<your-domain>` → `http://jellyfin:8096`
-   - `immich.<your-domain>` → `http://immich:2283`
-   - `vaultwarden.<your-domain>` → `http://vaultwarden:80`
+5. **Approve the subnet route**
+   - In the Tailscale admin console → **Machines → home → Edit route settings**
+   - Enable (approve) the advertised `172.20.0.0/24` route.
 
 ## Configuration
 
 All configuration lives in `.env`. Copy `.env.example` to get started:
 
 ```env
-TUNNEL_TOKEN=your-tunnel-token
+TS_AUTHKEY=tskey-auth-...
 
-DOMAIN=example.com
-NEXTCLOUD_HOST=nextcloud
-JELLYFIN_HOST=jellyfin
-IMMICH_HOST=immich
-VAULTWARDEN_HOST=vaultwarden
+HOMESERVER_SUBNET=172.20.0.0/24
+
+NEXTCLOUD_IP=172.20.0.11
+JELLYFIN_IP=172.20.0.12
+IMMICH_IP=172.20.0.13
+VAULTWARDEN_IP=172.20.0.14
 
 # Nextcloud
 MYSQL_ROOT_PASSWORD=changeme
@@ -107,9 +106,11 @@ DATA_PATH=/mnt/data          # where persistent data is stored on the host
 
 ## Connecting to Vaultwarden
 
-Point any [Bitwarden client](https://bitwarden.com/download/) at your self-hosted server:
+Point any [Bitwarden client](https://bitwarden.com/download/) at your self-hosted server, over Tailscale:
 
 1. Open the Bitwarden app or browser extension
 2. Click the gear icon on the login screen
-3. Set **Server URL** to `https://vaultwarden.amrhost.de`
+3. Set **Server URL** to `http://172.20.0.14` (replace with your `VAULTWARDEN_IP`)
 4. Log in or create an account
+
+> Bitwarden clients accept `http://` URLs when connecting to a private IP. If your client insists on HTTPS, you can reach Vaultwarden through Tailscale's HTTPS feature instead.

@@ -20,7 +20,8 @@ services:
     volumes:
       - ${DATA_PATH}/immich/upload:/usr/src/app/upload
     networks:
-      - homeserver
+      homeserver:
+        ipv4_address: ${IMMICH_IP}
 
   immich-redis:
     image: valkey/valkey:9-alpine

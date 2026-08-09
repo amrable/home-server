@@ -1,7 +1,10 @@
-SERVICES = nextcloud jellyfin immich vaultwarden cloudflared
+SERVICES = tailscale nextcloud jellyfin immich vaultwarden
 
-up-all:
-	docker network create homeserver || true
+net:
+	docker network rm homeserver 2>/dev/null || true
+	docker network create --subnet=${HOMESERVER_SUBNET} homeserver
+
+up-all: net
 	$(foreach s, $(SERVICES), docker compose --env-file .env -f services/$(s)/docker-compose.yml up -d;)
 
 down-all:

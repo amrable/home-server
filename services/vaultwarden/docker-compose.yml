@@ -9,9 +9,10 @@ services:
     container_name: vaultwarden
     restart: unless-stopped
     environment:
-      DOMAIN: https://${VAULTWARDEN_HOST}.${DOMAIN}
+      DOMAIN: http://${VAULTWARDEN_IP}:80
       ADMIN_TOKEN: ${VAULTWARDEN_ADMIN_TOKEN}
     volumes:
       - ${DATA_PATH}/vaultwarden:/data
     networks:
-      - homeserver
+      homeserver:
+        ipv4_address: ${VAULTWARDEN_IP}

@@ -12,4 +12,5 @@ services:
       - ${DATA_PATH}/jellyfin/config:/config
       - ${DATA_PATH}/media:/media
     networks:
-      - homeserver
+      homeserver:
+        ipv4_address: ${JELLYFIN_IP}
