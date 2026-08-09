@@ -5,7 +5,7 @@ networks:
 
 services:
   immich-server:
-    image: ghcr.io/immich-app/immich-server:release
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
     container_name: immich
     restart: unless-stopped
     depends_on:
@@ -23,13 +23,15 @@ services:
       - homeserver
 
   immich-redis:
-    image: redis:6-alpine
+    image: valkey/valkey:9-alpine
+    container_name: immich-redis
     restart: unless-stopped
     networks:
       - homeserver
 
   immich-postgres:
-    image: tensorchord/pgvecto-rs:pg14-v0.2.0
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0
+    container_name: immich-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${IMMICH_DB_USERNAME}
