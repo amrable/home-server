@@ -1,4 +1,4 @@
-SERVICES = nextcloud jellyfin immich vaultwarden caddy
+SERVICES = nextcloud jellyfin immich vaultwarden cloudflared
 
 up-all:
 	docker network create homeserver || true
