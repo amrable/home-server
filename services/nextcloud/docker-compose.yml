@@ -30,8 +30,10 @@ services:
       NEXTCLOUD_ADMIN_USER: ${NEXTCLOUD_ADMIN_USER}
       NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD}
       NEXTCLOUD_TRUSTED_DOMAINS: ${NEXTCLOUD_HOST}.${DOMAIN}
-      OVERWRITE_PROTOCOL: https
+      OVERWRITEHOST: ${NEXTCLOUD_HOST}.${DOMAIN}
+      OVERWRITEPROTOCOL: https
     volumes:
       - ${DATA_PATH}/nextcloud/data:/var/www/html
+      - ./hooks.d:/docker-entrypoint-hooks.d
     networks:
       - homeserver
