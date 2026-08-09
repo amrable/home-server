@@ -1,36 +1,38 @@
 # Home Server
 
-A self-hosted server stack running on Docker (e.g. Hetzner), accessed privately over a [Tailscale](https://tailscale.com/) VPN. Nothing is exposed to the public internet.
+A self-hosted server stack running on Docker (e.g. Hetzner), accessed privately over a [Tailscale](https://tailscale.com/) tailnet. Nothing is exposed to the public internet.
 
 ## Services
 
+Each service runs behind its own Tailscale sidecar, reachable at a proper HTTPS URL inside the tailnet:
+
 | Service | Description | URL (over Tailscale) |
 |---|---|---|
-| [Nextcloud](https://nextcloud.com/) | File storage and sync | `http://172.20.0.11` |
-| [Jellyfin](https://jellyfin.org/) | Media server | `http://172.20.0.12:8096` |
-| [Immich](https://immich.app/) | Photo and video backup | `http://172.20.0.13:2283` |
-| [Vaultwarden](https://github.com/dani-garcia/vaultwarden) | Self-hosted Bitwarden password manager | `http://172.20.0.14` |
+| [Nextcloud](https://nextcloud.com/) | File storage and sync | `https://cloud.<tailnet-domain>` |
+| [Jellyfin](https://jellyfin.org/) | Media server | `https://media.<tailnet-domain>` |
+| [Immich](https://immich.app/) | Photo and video backup | `https://photos.<tailnet-domain>` |
+| [Vaultwarden](https://github.com/dani-garcia/vaultwarden) | Self-hosted Bitwarden password manager | `https://vault.<tailnet-domain>` |
 
 ## Architecture
 
-All services run in Docker containers on a shared `homeserver` bridge network (`172.20.0.0/24`) with fixed per-service IPs. A `tailscale` container runs on the same host as a **subnet router**, advertising that subnet to your tailnet, so your phone/laptop can reach the services directly over the encrypted WireGuard mesh — no public ports, no TLS-terminating proxy in front.
+All services run in Docker containers on a shared `homeserver` bridge network. Each service is paired with a **Tailscale sidecar container** that joins the tailnet as its own machine (`cloud`, `media`, `photos`, `vault`) and runs [`tailscale serve`](https://tailscale.com/kb/1312/serve): it terminates TLS with a real Let's Encrypt cert provisioned by Tailscale and reverse-proxies to its service over the docker network. No public ports, no IPs to remember, valid HTTPS everywhere (Bitwarden clients require it).
 
 ```
 Your device (Tailscale client)
       │
       ▼
- tailscale subnet router (advertises 172.20.0.0/24)
-      │
-      ├── http://172.20.0.11       → Nextcloud
-      ├── http://172.20.0.12:8096  → Jellyfin
-      ├── http://172.20.0.13:2283  → Immich
-      └── http://172.20.0.14       → Vaultwarden
+┌─ tailnet (MagicDNS: <name>.<tailnet-domain>) ─────────────┐
+│  cloud-ts  → serve 443 → http://nextcloud:80              │
+│  media-ts  → serve 443 → http://jellyfin:8096             │
+│  photos-ts → serve 443 → http://immich:2283               │
+│  vault-ts  → serve 443 → http://vaultwarden:80            │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ## Prerequisites
 
 - Docker & Docker Compose
-- A [Tailscale](https://tailscale.com/) account
+- A [Tailscale](https://tailscale.com/) account with **MagicDNS** and **HTTPS Certificates** enabled (admin console → **DNS**)
 
 ## Setup
 
@@ -43,22 +45,24 @@ Your device (Tailscale client)
 2. **Configure environment**
    ```bash
    cp .env.example .env
-   # Set TS_AUTHKEY and passwords
+   # Set TS_AUTHKEY, TAILNET_DOMAIN, and passwords
    ```
 
 3. **Create a Tailscale auth key**
    - In the Tailscale admin console → **Settings → Keys** → **Generate auth key**.
-   - Enable **Subnet routes** on the key (required so the container can advertise `172.20.0.0/24`).
+   - Enable **Reusable** (required — each service runs its own tailscale machine).
    - Copy the key into `TS_AUTHKEY` in `.env`.
 
-4. **Start all services**
+4. **Set your tailnet domain**
+   - Admin console → **DNS** → your tailnet's MagicDNS suffix (e.g. `tail80ea1b.ts.net`).
+   - Copy it into `TAILNET_DOMAIN` in `.env`.
+
+5. **Start all services**
    ```bash
    make up-all
    ```
 
-5. **Approve the subnet route**
-   - In the Tailscale admin console → **Machines → home → Edit route settings**
-   - Enable (approve) the advertised `172.20.0.0/24` route.
+   Each sidecar registers itself in the tailnet and requests its cert automatically. First HTTPS hit per service may take a few seconds while the cert is provisioned.
 
 ## Configuration
 
@@ -66,13 +70,7 @@ All configuration lives in `.env`. Copy `.env.example` to get started:
 
 ```env
 TS_AUTHKEY=tskey-auth-...
-
-HOMESERVER_SUBNET=172.20.0.0/24
-
-NEXTCLOUD_IP=172.20.0.11
-JELLYFIN_IP=172.20.0.12
-IMMICH_IP=172.20.0.13
-VAULTWARDEN_IP=172.20.0.14
+TAILNET_DOMAIN=my-tailnet.ts.net
 
 # Nextcloud
 MYSQL_ROOT_PASSWORD=changeme
@@ -110,7 +108,5 @@ Point any [Bitwarden client](https://bitwarden.com/download/) at your self-hoste
 
 1. Open the Bitwarden app or browser extension
 2. Click the gear icon on the login screen
-3. Set **Server URL** to `http://172.20.0.14` (replace with your `VAULTWARDEN_IP`)
+3. Set **Server URL** to `https://vault.<your-tailnet-domain>`
 4. Log in or create an account
-
-> Bitwarden clients accept `http://` URLs when connecting to a private IP. If your client insists on HTTPS, you can reach Vaultwarden through Tailscale's HTTPS feature instead.
