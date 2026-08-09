@@ -6,6 +6,7 @@ networks:
 services:
   nextcloud-db:
     image: mariadb:11
+    container_name: nextcloud-db
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
@@ -19,6 +20,7 @@ services:
 
   nextcloud:
     image: nextcloud:latest
+    container_name: nextcloud
     restart: unless-stopped
     depends_on:
       - nextcloud-db
@@ -34,6 +36,5 @@ services:
       OVERWRITEPROTOCOL: https
     volumes:
       - ${DATA_PATH}/nextcloud/data:/var/www/html
-      - ./hooks.d:/docker-entrypoint-hooks.d
     networks:
       - homeserver

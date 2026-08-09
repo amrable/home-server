@@ -6,6 +6,7 @@ networks:
 services:
   jellyfin:
     image: jellyfin/jellyfin:latest
+    container_name: jellyfin
     restart: unless-stopped
     volumes:
       - ${DATA_PATH}/jellyfin/config:/config
