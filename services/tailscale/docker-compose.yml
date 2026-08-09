@@ -13,7 +13,7 @@ services:
       TS_AUTHKEY: ${TS_AUTHKEY}
       TS_STATE_DIR: /var/lib/tailscale
       TS_USERSPACE: "false"
-      TS_EXTRA_ARGS: --advertise-routes=${HOMESERVER_SUBNET}
+      TS_EXTRA_ARGS: --reset --advertise-routes=${HOMESERVER_SUBNET}
     sysctls:
       - net.ipv4.ip_forward=1
     volumes:
