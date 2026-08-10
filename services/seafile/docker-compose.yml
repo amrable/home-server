@@ -21,7 +21,7 @@ services:
       SEAFILE_SERVER_HOSTNAME: cloud.${TAILNET_DOMAIN}
     volumes:
       - ${DATA_PATH}/seafile/shared:/shared
-      - ./seahub_settings.py:/shared/seafile/conf/seahub_settings.py
+      - ./fix-csrf.sh:/CONTAINER_SCRIPTS/01-fix-csrf.sh:ro
     networks:
       - homeserver
 
