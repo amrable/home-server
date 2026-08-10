@@ -8,6 +8,7 @@ services:
     image: seafileltd/seafile-mc:11.0-latest
     container_name: seafile
     restart: unless-stopped
+    command: /entrypoint.sh
     depends_on:
       - seafile-db
       - seafile-memcached
@@ -21,7 +22,7 @@ services:
       SEAFILE_SERVER_HOSTNAME: cloud.${TAILNET_DOMAIN}
     volumes:
       - ${DATA_PATH}/seafile/shared:/shared
-      - ./fix-csrf.sh:/CONTAINER_SCRIPTS/01-fix-csrf.sh:ro
+      - ./entrypoint.sh:/entrypoint.sh:ro
     networks:
       - homeserver
 
