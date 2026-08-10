@@ -10,7 +10,7 @@
         "/sdoc-server/": {
           "Proxy": "http://seadoc:80"
         },
-        "/socket.io": {
+        "/socket.io/": {
           "Proxy": "http://seadoc:80"
         },
         "/": {
