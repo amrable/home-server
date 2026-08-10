@@ -16,9 +16,18 @@ services:
       OCIS_URL: https://cloud.${TAILNET_DOMAIN}
       OCIS_ADMIN_PASSWORD: ${OCIS_ADMIN_PASSWORD:?Variable is not set or empty}
       OCIS_LOG_LEVEL: ${OCIS_LOG_LEVEL:-info}
+      # oCIS always fetches $OCIS_URL/.well-known/openid-configuration from the
+      # PUBLIC URL to verify access tokens. TLS is therefore terminated twice:
+      # externally by the tailscale sidecar, and internally on :443 with the
+      # embedded self-signed certs (OCIS_INSECURE already trusts them). The
+      # public hostname is mapped to 127.0.0.1 so that internal fetch loops
+      # back to this container instead of failing DNS resolution (the .ts.net
+      # name does not resolve inside the Docker bridge network).
       OCIS_INSECURE: "true"
-      PROXY_HTTP_ADDR: 0.0.0.0:9200
-      PROXY_TLS: "false"
+      PROXY_HTTP_ADDR: 0.0.0.0:443
+      PROXY_TLS: "true"
+    extra_hosts:
+      - "cloud.${TAILNET_DOMAIN}:127.0.0.1"
     volumes:
       - ${DATA_PATH}/ocis/config:/etc/ocis
       - ${DATA_PATH}/ocis/data:/var/lib/ocis
