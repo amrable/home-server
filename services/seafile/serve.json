@@ -7,6 +7,12 @@
   "Web": {
     "${TS_CERT_DOMAIN}:443": {
       "Handlers": {
+        "/sdoc-server/": {
+          "Proxy": "http://seadoc:80"
+        },
+        "/socket.io": {
+          "Proxy": "http://seadoc:80"
+        },
         "/": {
           "Proxy": "http://seafile:80"
         }
