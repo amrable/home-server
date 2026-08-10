@@ -8,13 +8,13 @@ services:
     image: ${OCIS_IMAGE:-owncloud/ocis:latest}
     container_name: ocis
     restart: unless-stopped
+    entrypoint: ["/bin/sh"]
+    # ocis init generates /etc/ocis/ocis.yaml with all secrets on first boot;
+    # it exits non-zero if the config already exists, hence "|| true".
+    command: ["-c", "ocis init --insecure yes || true; ocis server"]
     environment:
       OCIS_URL: https://cloud.${TAILNET_DOMAIN}
       OCIS_ADMIN_PASSWORD: ${OCIS_ADMIN_PASSWORD:?Variable is not set or empty}
-      OCIS_JWT_SECRET: ${OCIS_JWT_SECRET:?Variable is not set or empty}
-      OCIS_MACHINE_AUTH_API_KEY: ${OCIS_MACHINE_AUTH_API_KEY:?Variable is not set or empty}
-      OCIS_TRANSFER_SECRET: ${OCIS_TRANSFER_SECRET:?Variable is not set or empty}
-      IDM_ADMIN_PASSWORD: ${OCIS_ADMIN_PASSWORD}
       OCIS_LOG_LEVEL: ${OCIS_LOG_LEVEL:-info}
       OCIS_INSECURE: "true"
       PROXY_HTTP_ADDR: 0.0.0.0:9200

@@ -74,11 +74,8 @@ All configuration lives in `.env`. Copy `.env.example` to get started:
 TS_AUTHKEY=tskey-auth-...
 TAILNET_DOMAIN=my-tailnet.ts.net
 
-# OCIS
+# OCIS (all other secrets are auto-generated into config/ocis.yaml by `ocis init`)
 OCIS_ADMIN_PASSWORD=changeme
-OCIS_JWT_SECRET=changeme        # openssl rand -base64 32
-OCIS_MACHINE_AUTH_API_KEY=changeme
-OCIS_TRANSFER_SECRET=changeme
 
 # Immich
 IMMICH_DB_USERNAME=immich
