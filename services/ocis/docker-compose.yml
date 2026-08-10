@@ -14,7 +14,10 @@ services:
     command: ["-c", "ocis init --insecure yes || true; ocis server"]
     environment:
       OCIS_URL: https://cloud.${TAILNET_DOMAIN}
-      OCIS_ADMIN_PASSWORD: ${OCIS_ADMIN_PASSWORD:?Variable is not set or empty}
+      # Used by `ocis init` to set the admin login password (the docs'
+      # OCIS_ADMIN_PASSWORD is not actually read by oCIS). Only takes effect
+      # on a fresh init - i.e. after wiping ${DATA_PATH}/ocis/config.
+      IDM_ADMIN_PASSWORD: ${OCIS_ADMIN_PASSWORD:?Variable is not set or empty}
       OCIS_LOG_LEVEL: ${OCIS_LOG_LEVEL:-info}
       # oCIS always fetches $OCIS_URL/.well-known/openid-configuration from the
       # PUBLIC URL to verify access tokens. TLS is therefore terminated twice:
