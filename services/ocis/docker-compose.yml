@@ -1,0 +1,43 @@
+networks:
+  homeserver:
+    external: true
+    name: homeserver
+
+services:
+  ocis:
+    image: ${OCIS_IMAGE:-owncloud/ocis:latest}
+    container_name: ocis
+    restart: unless-stopped
+    environment:
+      OCIS_URL: https://cloud.${TAILNET_DOMAIN}
+      OCIS_ADMIN_PASSWORD: ${OCIS_ADMIN_PASSWORD:?Variable is not set or empty}
+      OCIS_JWT_SECRET: ${OCIS_JWT_SECRET:?Variable is not set or empty}
+      OCIS_MACHINE_AUTH_API_KEY: ${OCIS_MACHINE_AUTH_API_KEY:?Variable is not set or empty}
+      OCIS_TRANSFER_SECRET: ${OCIS_TRANSFER_SECRET:?Variable is not set or empty}
+      IDM_ADMIN_PASSWORD: ${OCIS_ADMIN_PASSWORD}
+      OCIS_LOG_LEVEL: ${OCIS_LOG_LEVEL:-info}
+      OCIS_INSECURE: "true"
+      PROXY_HTTP_ADDR: 0.0.0.0:9200
+      PROXY_TLS: "false"
+    volumes:
+      - ${DATA_PATH}/ocis/config:/etc/ocis
+      - ${DATA_PATH}/ocis/data:/var/lib/ocis
+    networks:
+      - homeserver
+
+  ocis-ts:
+    image: tailscale/tailscale:stable
+    container_name: ocis-ts
+    restart: unless-stopped
+    hostname: cloud
+    depends_on:
+      - ocis
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - ${DATA_PATH}/tailscale/cloud:/var/lib/tailscale
+      - ./serve.json:/config/serve.json:ro
+    networks:
+      - homeserver

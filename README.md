@@ -8,10 +8,11 @@ Each service runs behind its own Tailscale sidecar, reachable at a proper HTTPS 
 
 | Service | Description | URL (over Tailscale) |
 |---|---|---|
-| [Nextcloud](https://nextcloud.com/) | File storage and sync | `https://cloud.<tailnet-domain>` |
+| [OCIS](https://owncloud.com/infinite-scale/) | File storage and sync (ownCloud Infinite Scale) | `https://cloud.<tailnet-domain>` |
 | [Jellyfin](https://jellyfin.org/) | Media server | `https://media.<tailnet-domain>` |
 | [Immich](https://immich.app/) | Photo and video backup | `https://photos.<tailnet-domain>` |
 | [Vaultwarden](https://github.com/dani-garcia/vaultwarden) | Self-hosted Bitwarden password manager | `https://vault.<tailnet-domain>` |
+| [Paperless-ngx](https://docs.paperless-ngx.com/) | Document management | `https://docs.<tailnet-domain>` |
 
 ## Architecture
 
@@ -22,10 +23,11 @@ Your device (Tailscale client)
       │
       ▼
 ┌─ tailnet (MagicDNS: <name>.<tailnet-domain>) ─────────────┐
-│  cloud-ts  → serve 443 → http://nextcloud:80              │
+│  cloud-ts  → serve 443 → http://ocis:9200                 │
 │  media-ts  → serve 443 → http://jellyfin:8096             │
 │  photos-ts → serve 443 → http://immich:2283               │
 │  vault-ts  → serve 443 → http://vaultwarden:80            │
+│  docs-ts   → serve 443 → http://paperless:8000            │
 └───────────────────────────────────────────────────────────┘
 ```
 
@@ -72,13 +74,11 @@ All configuration lives in `.env`. Copy `.env.example` to get started:
 TS_AUTHKEY=tskey-auth-...
 TAILNET_DOMAIN=my-tailnet.ts.net
 
-# Nextcloud
-MYSQL_ROOT_PASSWORD=changeme
-MYSQL_DATABASE=nextcloud
-MYSQL_USER=nextcloud
-MYSQL_PASSWORD=changeme
-NEXTCLOUD_ADMIN_USER=admin
-NEXTCLOUD_ADMIN_PASSWORD=changeme
+# OCIS
+OCIS_ADMIN_PASSWORD=changeme
+OCIS_JWT_SECRET=changeme        # openssl rand -base64 32
+OCIS_MACHINE_AUTH_API_KEY=changeme
+OCIS_TRANSFER_SECRET=changeme
 
 # Immich
 IMMICH_DB_USERNAME=immich
