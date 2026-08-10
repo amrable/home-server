@@ -1,4 +1,4 @@
-SERVICES = nextcloud jellyfin immich vaultwarden paperless
+SERVICES = seafile jellyfin immich vaultwarden paperless
 
 net:
 	docker network create homeserver 2>/dev/null || true

@@ -1,0 +1,62 @@
+networks:
+  homeserver:
+    external: true
+    name: homeserver
+
+services:
+  seafile:
+    image: seafileltd/seafile-mc:11.0-latest
+    container_name: seafile
+    restart: unless-stopped
+    depends_on:
+      - seafile-db
+      - seafile-memcached
+    environment:
+      DB_HOST: seafile-db
+      DB_ROOT_PASSWD: ${SEAFILE_DB_ROOT_PASSWORD}
+      TIME_ZONE: ${TZ:-UTC}
+      SEAFILE_ADMIN_EMAIL: ${SEAFILE_ADMIN_EMAIL}
+      SEAFILE_ADMIN_PASSWORD: ${SEAFILE_ADMIN_PASSWORD}
+      SEAFILE_SERVER_LETSENCRYPT: "false"
+      SEAFILE_SERVER_HOSTNAME: cloud.${TAILNET_DOMAIN}
+    volumes:
+      - ${DATA_PATH}/seafile/shared:/shared
+    networks:
+      - homeserver
+
+  seafile-db:
+    image: mariadb:10.11
+    container_name: seafile-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${SEAFILE_DB_ROOT_PASSWORD}
+      MYSQL_LOG_CONSOLE: "true"
+    volumes:
+      - ${DATA_PATH}/seafile/mysql:/var/lib/mysql
+    networks:
+      - homeserver
+
+  seafile-memcached:
+    image: memcached:1.6
+    container_name: seafile-memcached
+    restart: unless-stopped
+    entrypoint: memcached -m 256
+    networks:
+      - homeserver
+
+  seafile-ts:
+    image: tailscale/tailscale:stable
+    container_name: seafile-ts
+    restart: unless-stopped
+    hostname: cloud
+    depends_on:
+      - seafile
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - ${DATA_PATH}/tailscale/cloud:/var/lib/tailscale
+      - ./serve.json:/config/serve.json:ro
+    networks:
+      - homeserver
