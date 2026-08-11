@@ -1,0 +1,126 @@
+{
+  "name": "Paperless Invoice Summary",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "paperless",
+        "responseMode": "onReceived",
+        "responseCode": 200,
+        "options": {}
+      },
+      "id": "webhook-paperless",
+      "name": "Paperless Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-240, 0],
+      "webhookId": "webhook-paperless-invoice"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://paperless:8000/api/documents/{{ $json.body.id }}/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": false,
+        "sendBody": false,
+        "options": {}
+      },
+      "credentials": {
+        "httpBasicAuth": {
+          "name": "Paperless",
+          "id": ""
+        }
+      },
+      "id": "doc-paperless",
+      "name": "Get Document from Paperless",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.apiKey }}",
+              "parameterType": "string"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ model: \"openai/gpt-4o-mini:json\", messages: [ { role: \"system\", content: \"Extract the following fields from the invoice text as strict JSON (no markdown, no extra text): vendor, invoice_number, amount, currency, invoice_date, due_date, description. Never guess - use null when a field cannot be determined.\" }, { role: \"user\", content: $json.content } ] }",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "OpenRouter",
+          "id": ""
+        }
+      },
+      "id": "llm-openrouter",
+      "name": "Call OpenRouter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "export default async function() {\n  const completion = $input.first().json.choices[0].message.content;\n  let data = {};\n  try { data = JSON.parse(completion); } catch { data = { raw: completion }; }\n  return [{ json: data }];\n}"
+      },
+      "id": "parse-llm",
+      "name": "Parse Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 0]
+    }
+  ],
+  "connections": {
+    "Paperless Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get Document from Paperless",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Document from Paperless": {
+      "main": [
+        [
+          {
+            "node": "Call OpenRouter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call OpenRouter": {
+      "main": [
+        [
+          {
+            "node": "Parse Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "pinData": {},
+  "versionId": ""
+}

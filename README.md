@@ -104,12 +104,14 @@ DATA_PATH=/mnt/data          # where persistent data is stored on the host
 
 When Paperless consumes a document it can POST a webhook into n8n, e.g. to trigger an OCR/AI/extraction workflow. Set it up once in the Paperless UI:
 
-1. **n8n**: create a workflow with a **Webhook** trigger node (path `paperless`, e.g. `POST /webhook/paperless`). Enable the workflow.
+1. **n8n**: import the workflow from `services/n8n/workflows/paperless-invoice.json`, then create a **Webhook** trigger node with path `paperless` (`POST /webhook/paperless`).
 2. **Paperless** → **Workflows** → **Add workflow**:
    - Trigger: **Document added**
    - Action: **Webhook**
    - URL: `http://n8n-app:5678/webhook/paperless` (docker-internal, no TLS needed)
-   - Body: JSON, optionally using placeholders such as `{{ document.title }}`, `{{ document.id }}`
+   - Body: JSON with the supported placeholders, e.g. `{"id": {{ id }}, "doc_url": "{{ doc_url }}", "title": "{{ title }}"}`
+
+See `services/n8n/README.md` for the full Trigger + Action walkthrough.
 
 No extra config is required: Paperless allows internal webhook requests by default, and both containers share the `homeserver` network.
 
