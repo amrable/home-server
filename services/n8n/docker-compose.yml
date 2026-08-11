@@ -8,9 +8,6 @@ services:
     image: docker.n8n.io/n8nio/n8n:latest
     container_name: n8n-app
     restart: unless-stopped
-    command: >
-      sh -c "n8n import:workflow --separate --input=/home/node/.n8n/workflows || true;
-      exec n8n start"
     environment:
       N8N_HOST: n8n.${TAILNET_DOMAIN}
       N8N_PROTOCOL: https
@@ -24,7 +21,6 @@ services:
       GENERIC_TIMEZONE: ${TZ:-UTC}
     volumes:
       - ${DATA_PATH}/n8n:/home/node/.n8n
-      - ./workflows:/home/node/.n8n/workflows:ro
     networks:
       - homeserver
 
