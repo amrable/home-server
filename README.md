@@ -108,7 +108,7 @@ When Paperless consumes a document it can POST a webhook into n8n, e.g. to trigg
 2. **Paperless** → **Workflows** → **Add workflow**:
    - Trigger: **Document added**
    - Action: **Webhook**
-   - URL: `http://n8n:5678/webhook/paperless` (docker-internal, no TLS needed)
+   - URL: `http://n8n-app:5678/webhook/paperless` (docker-internal, no TLS needed)
    - Body: JSON, optionally using placeholders such as `{{ document.title }}`, `{{ document.id }}`
 
 No extra config is required: Paperless allows internal webhook requests by default, and both containers share the `homeserver` network.
