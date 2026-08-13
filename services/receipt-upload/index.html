@@ -95,6 +95,21 @@
   th { color: #94a3b8; font-weight: 500; }
   td.num, th.num { text-align: right; }
   .total { border-top: 2px solid #475569; font-weight: 600; }
+  .history { margin-top: 16px; border-top: 1px solid #334155; padding-top: 12px; }
+  .history h3 { margin: 0 0 8px; font-size: .95rem; color: #94a3b8; }
+  .hist-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: .85rem;
+  }
+  .hist-row:hover { background: #0f172a; }
+  .hist-main { display: flex; flex-direction: column; }
+  .hist-date { color: #64748b; font-size: .75rem; }
+  .hist-total { font-weight: 600; }
   pre {
     display: none;
     margin: 16px 0 0;
@@ -128,12 +143,15 @@
     <div id="summary" class="summary"></div>
 
     <pre id="out"></pre>
+
+    <div id="history" class="history"></div>
   </div>
 
 <script>
   const API_URL = '/api/parse';
   const euro = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' });
   const money = (v) => (v == null || isNaN(v) ? '—' : euro.format(v));
+  const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   const drop = document.getElementById('drop');
   const fileInput = document.getElementById('file');
@@ -142,6 +160,7 @@
   const status = document.getElementById('status');
   const summary = document.getElementById('summary');
   const out = document.getElementById('out');
+  const history = document.getElementById('history');
 
   let selected = null;
 
@@ -224,12 +243,41 @@
 
       status.classList.remove('show');
       renderSummary(json.parsed, json.cached);
+      loadHistory();
     } catch (err) {
       showStatus('Failed: ' + err.message, true);
     } finally {
       btn.disabled = false;
     }
   });
+
+  async function loadHistory() {
+    try {
+      const res = await fetch('/api/receipts');
+      if (!res.ok) return;
+      const list = await res.json();
+      history.innerHTML = '<h3>Past receipts</h3>';
+      if (!list.length) {
+        history.innerHTML += '<p class="sub">No receipts stored yet.</p>';
+        return;
+      }
+      list.forEach((r) => {
+        const p = r.parsed || {};
+        const row = document.createElement('div');
+        row.className = 'hist-row';
+        row.innerHTML =
+          '<div class="hist-main">' +
+            '<span class="hist-name">' + escapeHtml(p.vendor || r.filename) + '</span>' +
+            '<span class="hist-date">' + escapeHtml(r.createdAt) + '</span>' +
+          '</div>' +
+          '<div class="hist-total">' + money(p.total) + ' ' + escapeHtml(p.currency || '') + '</div>';
+        row.addEventListener('click', () => renderSummary(p, true));
+        history.appendChild(row);
+      });
+    } catch (_) { /* non-critical */ }
+  }
+
+  loadHistory();
 </script>
 </body>
 </html>
