@@ -60,6 +60,41 @@
     cursor: pointer;
   }
   button:disabled { background: #475569; color: #94a3b8; cursor: not-allowed; }
+  .status {
+    display: none;
+    margin-top: 16px;
+    font-size: .85rem;
+    color: #38bdf8;
+  }
+  .status.show { display: block; }
+  .status.error { color: #f87171; }
+  .summary {
+    display: none;
+    margin-top: 16px;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 16px;
+  }
+  .summary.show { display: block; }
+  .summary h3 { margin: 0 0 10px; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #334155;
+    color: #94a3b8;
+    font-size: .7rem;
+    vertical-align: middle;
+    margin-left: 8px;
+  }
+  .kv { display: flex; justify-content: space-between; margin: 4px 0; font-size: .9rem; }
+  .kv b { color: #94a3b8; font-weight: 500; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: .85rem; }
+  th, td { text-align: left; padding: 6px 8px; border-top: 1px solid #334155; }
+  th { color: #94a3b8; font-weight: 500; }
+  td.num, th.num { text-align: right; }
+  .total { border-top: 2px solid #475569; font-weight: 600; }
   pre {
     display: none;
     margin: 16px 0 0;
@@ -74,13 +109,12 @@
     word-break: break-word;
   }
   pre.show { display: block; }
-  pre.error { border-color: #ef4444; color: #fca5a5; }
 </style>
 </head>
 <body>
   <div class="card">
     <h1>Receipt Parser</h1>
-    <p class="sub">Upload a receipt (PDF or image) — it gets parsed by Gemini and the breakdown is returned.</p>
+    <p class="sub">Upload a receipt (PDF or image) — it gets parsed by Gemini and the breakdown is returned. Duplicates are served from the database.</p>
 
     <div id="drop" class="drop">Drag &amp; drop a file here, or click to browse</div>
     <input id="file" type="file" hidden accept="application/pdf,image/png,image/jpeg,image/webp" />
@@ -89,16 +123,24 @@
 
     <button id="parse" disabled>Parse receipt</button>
 
+    <div id="status" class="status"></div>
+
+    <div id="summary" class="summary"></div>
+
     <pre id="out"></pre>
   </div>
 
 <script>
-  const WEBHOOK_URL = 'https://n8n.tail80ea1b.ts.net/webhook/parse-receipt';
+  const API_URL = '/api/parse';
+  const euro = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' });
+  const money = (v) => (v == null || isNaN(v) ? '—' : euro.format(v));
 
   const drop = document.getElementById('drop');
   const fileInput = document.getElementById('file');
   const meta = document.getElementById('meta');
   const btn = document.getElementById('parse');
+  const status = document.getElementById('status');
+  const summary = document.getElementById('summary');
   const out = document.getElementById('out');
 
   let selected = null;
@@ -121,18 +163,54 @@
     setFile(e.dataTransfer.files[0]);
   });
 
+  function showStatus(msg, isError) {
+    status.textContent = msg;
+    status.classList.toggle('error', !!isError);
+    status.classList.add('show');
+  }
+
+  function renderSummary(p, cached) {
+    const taxRows = (p.tax || []).map((t) =>
+      '<div class="kv"><b>VAT ' + (t.rate_percent ?? '?') + '%</b><span>' + money(t.amount) + '</span></div>'
+    ).join('');
+
+    const itemRows = (p.items || []).map((it) =>
+      '<tr>' +
+        '<td>' + (it.name || '—') + '</td>' +
+        '<td class="num">' + (it.quantity ?? '') + '</td>' +
+        '<td class="num">' + money(it.unit_price) + '</td>' +
+        '<td class="num">' + money(it.total) + '</td>' +
+      '</tr>'
+    ).join('');
+
+    summary.innerHTML =
+      '<h3>' + (p.vendor || 'Unknown vendor') +
+        (cached ? '<span class="badge">cached</span>' : '') + '</h3>' +
+      '<div class="kv"><b>Date</b><span>' + (p.invoice_date || '—') + '</span></div>' +
+      '<div class="kv"><b>Invoice #</b><span>' + (p.invoice_number || '—') + '</span></div>' +
+      (p.items.length ? '<table><tr><th>Item</th><th class="num">Qty</th><th class="num">Unit</th><th class="num">Total</th></tr>' + itemRows + '</table>' : '') +
+      (taxRows ? taxRows : '') +
+      '<div class="kv total"><b>Total</b><span>' + money(p.total) + ' ' + (p.currency || '') + '</span></div>';
+    summary.classList.add('show');
+    out.classList.remove('show');
+  }
+
   btn.addEventListener('click', async () => {
     if (!selected) return;
     btn.disabled = true;
-    out.classList.remove('show', 'error');
+    summary.classList.remove('show');
+    out.classList.remove('show');
     try {
+      showStatus('Reading file…');
       const reader = new FileReader();
       const data = await new Promise((resolve, reject) => {
         reader.onload = () => resolve(reader.result);
         reader.onerror = reject;
         reader.readAsDataURL(selected);
       });
-      const res = await fetch(WEBHOOK_URL, {
+
+      showStatus('Parsing…');
+      const res = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -141,16 +219,13 @@
           data: data.split(',')[1]
         })
       });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error('HTTP ' + res.status + ': ' + text.slice(0, 300));
-      }
+      if (!res.ok) throw new Error(await res.text().then((t) => 'HTTP ' + res.status + ': ' + t.slice(0, 300)));
       const json = await res.json();
-      out.classList.add('show');
-      out.textContent = JSON.stringify(json, null, 2);
+
+      status.classList.remove('show');
+      renderSummary(json.parsed, json.cached);
     } catch (err) {
-      out.classList.add('show', 'error');
-      out.textContent = 'Failed: ' + err.message;
+      showStatus('Failed: ' + err.message, true);
     } finally {
       btn.disabled = false;
     }

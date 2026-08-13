@@ -5,11 +5,15 @@ networks:
 
 services:
   receipt-upload:
-    image: nginx:alpine
+    image: python:3.13-alpine
     container_name: receipt-upload
     restart: unless-stopped
+    working_dir: /app
+    command: python server.py
     volumes:
-      - ./index.html:/usr/share/nginx/html/index.html:ro
+      - ./server.py:/app/server.py:ro
+      - ./index.html:/app/index.html:ro
+      - ${DATA_PATH}/receipt-upload:/app/data
     networks:
       - homeserver
 
