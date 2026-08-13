@@ -71,11 +71,6 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         conn = get_db()
-        row = conn.execute('SELECT result FROM receipts WHERE filename = ?', (filename,)).fetchone()
-        if row:
-            conn.close()
-            self.send_json(json.dumps({'cached': True, 'parsed': json.loads(row[0])}).encode('utf-8'))
-            return
 
         try:
             r = urllib.request.Request(
