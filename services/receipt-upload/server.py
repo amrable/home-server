@@ -16,11 +16,29 @@ def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
         'CREATE TABLE IF NOT EXISTS receipts ('
-        'filename TEXT PRIMARY KEY, '
+        'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+        'filename TEXT, '
         'result TEXT NOT NULL, '
         'mime_type TEXT, '
         'created_at TEXT DEFAULT CURRENT_TIMESTAMP)'
     )
+    row = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='receipts'").fetchone()
+    if row and 'filename TEXT PRIMARY KEY' in row[0]:
+        conn.execute(
+            'CREATE TABLE receipts_new ('
+            'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+            'filename TEXT, '
+            'result TEXT NOT NULL, '
+            'mime_type TEXT, '
+            'created_at TEXT DEFAULT CURRENT_TIMESTAMP)'
+        )
+        conn.execute(
+            'INSERT INTO receipts_new (filename, result, mime_type, created_at) '
+            'SELECT filename, result, mime_type, created_at FROM receipts'
+        )
+        conn.execute('DROP TABLE receipts')
+        conn.execute('ALTER TABLE receipts_new RENAME TO receipts')
+        conn.commit()
     return conn
 
 
@@ -93,7 +111,7 @@ class Handler(BaseHTTPRequestHandler):
 
         parsed = result.get('parsed', result)
         conn.execute(
-            'INSERT OR REPLACE INTO receipts (filename, result, mime_type) VALUES (?, ?, ?)',
+            'INSERT INTO receipts (filename, result, mime_type) VALUES (?, ?, ?)',
             (filename, json.dumps(parsed), req.get('mimeType', '')),
         )
         conn.commit()
