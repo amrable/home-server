@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import urllib.error
@@ -42,6 +43,58 @@ def get_db():
     return conn
 
 
+def compute_summary():
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute('SELECT result FROM receipts').fetchall()
+    conn.close()
+
+    totals = {}
+    vendors = {}
+    months = {}
+    count = 0
+    for (res,) in rows:
+        try:
+            p = json.loads(res)
+        except ValueError:
+            continue
+        amount = p.get('total')
+        if amount is None:
+            continue
+        count += 1
+        currency = p.get('currency') or 'EUR'
+        totals[currency] = totals.get(currency, 0) + amount
+
+        vendor = p.get('vendor')
+        if vendor:
+            v = vendors.setdefault(vendor, {'count': 0, 'total': {}})
+            v['count'] += 1
+            v['total'][currency] = v['total'].get(currency, 0) + amount
+
+        date = p.get('invoice_date')
+        if date and len(date) >= 7:
+            month = date[:7]
+            months[month] = months.get(month, 0) + amount
+
+    return {'count': count, 'total': totals, 'by_vendor': vendors, 'by_month': months}
+
+
+def store_summary():
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        'CREATE TABLE IF NOT EXISTS summary ('
+        'key TEXT PRIMARY KEY, '
+        'value TEXT NOT NULL, '
+        'updated_at TEXT DEFAULT CURRENT_TIMESTAMP)'
+    )
+    conn.execute(
+        'INSERT INTO summary (key, value) VALUES (?, ?) '
+        'ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP',
+        ('user', json.dumps(compute_summary())),
+    )
+    conn.commit()
+    conn.close()
+
+
 class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
@@ -62,6 +115,15 @@ class Handler(BaseHTTPRequestHandler):
                 {'filename': r[0], 'mimeType': r[1], 'createdAt': r[2], 'parsed': json.loads(r[3])}
                 for r in rows
             ]).encode('utf-8')
+            self.send_json(payload)
+        elif self.path == '/api/summary':
+            conn = get_db()
+            row = conn.execute('SELECT value, updated_at FROM summary WHERE key = ?', ('user',)).fetchone()
+            conn.close()
+            if row:
+                payload = json.dumps({'summary': json.loads(row[0]), 'updatedAt': row[1]}).encode('utf-8')
+            else:
+                payload = json.dumps({'summary': {'count': 0, 'total': {}, 'by_vendor': {}, 'by_month': {}}, 'updatedAt': None}).encode('utf-8')
             self.send_json(payload)
         else:
             self.send_json(json.dumps({'error': 'not found'}).encode('utf-8'), 404)
@@ -116,7 +178,8 @@ class Handler(BaseHTTPRequestHandler):
         )
         conn.commit()
         conn.close()
-        self.send_json(json.dumps({'cached': False, 'parsed': parsed}).encode('utf-8'))
+        threading.Thread(target=store_summary, daemon=True).start()
+        self.send_json(json.dumps({'parsed': parsed}).encode('utf-8'))
 
     def send_json(self, payload, code=200):
         self.send_response(code)
@@ -131,4 +194,5 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     print('receipt-upload backend listening on :80')
+    threading.Thread(target=store_summary, daemon=True).start()
     ThreadingHTTPServer(('0.0.0.0', 80), Handler).serve_forever()

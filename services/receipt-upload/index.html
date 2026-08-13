@@ -27,6 +27,22 @@
   }
   h1 { margin: 0 0 4px; font-size: 1.4rem; }
   .sub { margin: 0 0 20px; color: #94a3b8; font-size: .9rem; }
+  .summary-bar {
+    display: none;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .summary-bar.show { display: flex; }
+  .stat {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: .8rem;
+    color: #94a3b8;
+  }
+  .stat b { color: #e2e8f0; font-size: .95rem; }
   .drop {
     border: 2px dashed #475569;
     border-radius: 8px;
@@ -129,7 +145,9 @@
 <body>
   <div class="card">
     <h1>Receipt Parser</h1>
-    <p class="sub">Upload a receipt (PDF or image) — it gets parsed by Gemini and the breakdown is returned. Duplicates are served from the database.</p>
+    <p class="sub">Upload a receipt (PDF or image) — it gets parsed by Gemini and the breakdown is returned.</p>
+
+    <div id="summary-bar" class="summary-bar"></div>
 
     <div id="drop" class="drop">Drag &amp; drop a file here, or click to browse</div>
     <input id="file" type="file" hidden accept="application/pdf,image/png,image/jpeg,image/webp" />
@@ -161,6 +179,7 @@
   const summary = document.getElementById('summary');
   const out = document.getElementById('out');
   const history = document.getElementById('history');
+  const summaryBar = document.getElementById('summary-bar');
 
   let selected = null;
 
@@ -242,8 +261,9 @@
       const json = await res.json();
 
       status.classList.remove('show');
-      renderSummary(json.parsed, json.cached);
+      renderSummary(json.parsed, json.cached !== undefined ? json.cached : false);
       loadHistory();
+      loadSummary();
     } catch (err) {
       showStatus('Failed: ' + err.message, true);
     } finally {
@@ -277,6 +297,29 @@
     } catch (_) { /* non-critical */ }
   }
 
+  async function loadSummary() {
+    try {
+      const res = await fetch('/api/summary');
+      if (!res.ok) return;
+      const data = await res.json();
+      const s = data.summary || {};
+      const currency = Object.keys(s.total || {})[0] || 'EUR';
+      const spent = (s.total && s.total[currency]) || 0;
+      const vendors = Object.entries(s.by_vendor || {})
+        .sort((a, b) => (b[1].total[currency] || 0) - (a[1].total[currency] || 0))
+        .slice(0, 3)
+        .map(([name, v]) =>
+          '<div class="stat">' + escapeHtml(name) + ' <b>' + money(v.total[currency]) + '</b></div>'
+        ).join('');
+      summaryBar.innerHTML =
+        '<div class="stat">Receipts <b>' + (s.count ?? 0) + '</b></div>' +
+        '<div class="stat">Total <b>' + money(spent) + '</b> ' + escapeHtml(currency) + '</div>' +
+        vendors;
+      summaryBar.classList.add('show');
+    } catch (_) { /* non-critical */ }
+  }
+
+  loadSummary();
   loadHistory();
 </script>
 </body>
