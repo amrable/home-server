@@ -126,21 +126,28 @@
     btn.disabled = true;
     out.classList.remove('show', 'error');
     try {
-      const res = await fetch(WEBHOOK_URL + '?filename=' + encodeURIComponent(selected.name), {
+      const reader = new FileReader();
+      const data = await new Promise((resolve, reject) => {
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(selected);
+      });
+      const res = await fetch(WEBHOOK_URL, {
         method: 'POST',
-        headers: {
-          'Content-Type': selected.type || 'application/octet-stream',
-          'X-File-Name': selected.name
-        },
-        body: selected
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: selected.name,
+          mimeType: selected.type || 'application/octet-stream',
+          data: data.split(',')[1]
+        })
       });
       if (!res.ok) {
         const text = await res.text();
         throw new Error('HTTP ' + res.status + ': ' + text.slice(0, 300));
       }
-      const data = await res.json();
+      const json = await res.json();
       out.classList.add('show');
-      out.textContent = JSON.stringify(data, null, 2);
+      out.textContent = JSON.stringify(json, null, 2);
     } catch (err) {
       out.classList.add('show', 'error');
       out.textContent = 'Failed: ' + err.message;
