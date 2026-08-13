@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Receipt Parser</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px;
+  }
+  .card {
+    width: 100%;
+    max-width: 640px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 24px;
+  }
+  h1 { margin: 0 0 4px; font-size: 1.4rem; }
+  .sub { margin: 0 0 20px; color: #94a3b8; font-size: .9rem; }
+  .drop {
+    border: 2px dashed #475569;
+    border-radius: 8px;
+    padding: 28px;
+    text-align: center;
+    cursor: pointer;
+    color: #94a3b8;
+    transition: border-color .15s, color .15s;
+  }
+  .drop.dragover, .drop:hover { border-color: #38bdf8; color: #e2e8f0; }
+  .file-meta {
+    display: none;
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: #0f172a;
+    border-radius: 6px;
+    font-size: .85rem;
+    word-break: break-all;
+  }
+  .file-meta.show { display: block; }
+  button {
+    width: 100%;
+    margin-top: 16px;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background: #0ea5e9;
+    color: #0f172a;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:disabled { background: #475569; color: #94a3b8; cursor: not-allowed; }
+  pre {
+    display: none;
+    margin: 16px 0 0;
+    padding: 12px;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: .8rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  pre.show { display: block; }
+  pre.error { border-color: #ef4444; color: #fca5a5; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Receipt Parser</h1>
+    <p class="sub">Upload a receipt (PDF or image) — it gets parsed by Gemini and the breakdown is returned.</p>
+
+    <div id="drop" class="drop">Drag &amp; drop a file here, or click to browse</div>
+    <input id="file" type="file" hidden accept="application/pdf,image/png,image/jpeg,image/webp" />
+
+    <div id="meta" class="file-meta"></div>
+
+    <button id="parse" disabled>Parse receipt</button>
+
+    <pre id="out"></pre>
+  </div>
+
+<script>
+  const WEBHOOK_URL = 'https://n8n.tail80ea1b.ts.net/webhook/parse-receipt';
+
+  const drop = document.getElementById('drop');
+  const fileInput = document.getElementById('file');
+  const meta = document.getElementById('meta');
+  const btn = document.getElementById('parse');
+  const out = document.getElementById('out');
+
+  let selected = null;
+
+  function setFile(f) {
+    if (!f) return;
+    selected = f;
+    meta.textContent = f.name + ' — ' + (f.size / 1024).toFixed(1) + ' KB';
+    meta.classList.add('show');
+    btn.disabled = false;
+  }
+
+  drop.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => setFile(fileInput.files[0]));
+  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('dragover'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+  drop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    drop.classList.remove('dragover');
+    setFile(e.dataTransfer.files[0]);
+  });
+
+  btn.addEventListener('click', async () => {
+    if (!selected) return;
+    btn.disabled = true;
+    out.classList.remove('show', 'error');
+    try {
+      const res = await fetch(WEBHOOK_URL + '?filename=' + encodeURIComponent(selected.name), {
+        method: 'POST',
+        headers: {
+          'Content-Type': selected.type || 'application/octet-stream',
+          'X-File-Name': selected.name
+        },
+        body: selected
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error('HTTP ' + res.status + ': ' + text.slice(0, 300));
+      }
+      const data = await res.json();
+      out.classList.add('show');
+      out.textContent = JSON.stringify(data, null, 2);
+    } catch (err) {
+      out.classList.add('show', 'error');
+      out.textContent = 'Failed: ' + err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
