@@ -177,6 +177,32 @@ def get_db():
     return conn
 
 
+CURRENCY_ALIASES = {
+    '€': 'EUR', 'euro': 'EUR', 'euros': 'EUR', 'eur': 'EUR',
+    '$': 'USD', 'usd': 'USD', 'usdollars': 'USD', 'dollars': 'USD', 'us dollar': 'USD',
+    '£': 'GBP', 'gbp': 'GBP', 'pound': 'GBP', 'pounds': 'GBP', 'sterling': 'GBP',
+    '¥': 'JPY', 'jpy': 'JPY', 'yen': 'JPY',
+    'chf': 'CHF', 'franc': 'CHF', 'francs': 'CHF',
+    'sek': 'SEK', 'krona': 'SEK', 'kr': 'SEK',
+    'nok': 'NOK', 'dkk': 'DKK', 'czk': 'CZK',
+    'zł': 'PLN', 'zl': 'PLN', 'pln': 'PLN', 'zloty': 'PLN',
+    'ron': 'RON', 'lei': 'RON', 'huf': 'HUF', 'ft': 'HUF', 'forint': 'HUF',
+    '₺': 'TRY', 'try': 'TRY', 'lira': 'TRY', 'aed': 'AED',
+}
+
+
+def norm_currency(c):
+    if not c:
+        return 'EUR'
+    c = str(c).strip()
+    low = c.lower()
+    if low in CURRENCY_ALIASES:
+        return CURRENCY_ALIASES[low]
+    if re.fullmatch(r'[a-zA-Z]{3}', c):
+        return c.upper()
+    return c
+
+
 def compute_summary():
     conn = get_db()
     rows = conn.execute('SELECT result, merchant FROM receipts').fetchall()
@@ -196,7 +222,7 @@ def compute_summary():
         if amount is None:
             continue
         count += 1
-        currency = p.get('currency') or 'EUR'
+        currency = norm_currency(p.get('currency'))
         totals[currency] = totals.get(currency, 0) + amount
 
         vendor = p.get('vendor')
@@ -263,13 +289,11 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == '/api/merchants':
             self.send_json(json.dumps({'merchants': MERCHANTS}).encode('utf-8'))
         elif self.path == '/api/summary':
+            s = compute_summary()
             conn = get_db()
-            row = conn.execute('SELECT value, updated_at FROM summary WHERE key = ?', ('user',)).fetchone()
+            row = conn.execute('SELECT updated_at FROM summary WHERE key = ?', ('user',)).fetchone()
             conn.close()
-            if row:
-                payload = json.dumps({'summary': json.loads(row[0]), 'updatedAt': row[1]}).encode('utf-8')
-            else:
-                payload = json.dumps({'summary': {'count': 0, 'total': {}, 'by_vendor': {}, 'by_month': {}}, 'updatedAt': None}).encode('utf-8')
+            payload = json.dumps({'summary': s, 'updatedAt': row[0] if row else None}).encode('utf-8')
             self.send_json(payload)
         else:
             self.send_json(json.dumps({'error': 'not found'}).encode('utf-8'), 404)
