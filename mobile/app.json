@@ -6,10 +6,12 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "scheme": "ledger",
     "backgroundColor": "#FAFAFA",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.amrfahmy.ledgerapp",
+      "bundleIdentifier": "com.amrfahmy.ledgerapp.dev",
+      "developmentTeam": "WJ2Z2NWH47",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Ledger uses your photos to parse receipts.",
         "NSCameraUsageDescription": "Ledger uses your camera to capture receipts.",
@@ -24,7 +26,8 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.amrfahmy.ledgerapp"
     },
     "plugins": [
       [
@@ -39,6 +42,18 @@
         "expo-document-picker",
         {
           "iCloudContainerEnvironment": "Production"
+        }
+      ],
+      [
+        "expo-sharing",
+        {
+          "ios": {
+            "enabled": true,
+            "activationRule": {
+              "supportsImageWithMaxCount": 1,
+              "supportsFileWithMaxCount": 1
+            }
+          }
         }
       ]
     ],

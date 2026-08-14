@@ -19,6 +19,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import { useIncomingShare } from 'expo-sharing';
 
 import { colors, money, tabular, type as typeScale } from './src/theme';
 import type { Merchant, ParsedReceipt, Receipt } from './src/types';
@@ -40,6 +41,87 @@ const tabularText = (size: number, weight: '400' | '500' | '600', color: string,
   ...tabular,
   ...extra,
 });
+
+function inferMime(uri: string, fallback?: string | null): string {
+  if (fallback) return fallback;
+  const ext = uri.split('.').pop()?.toLowerCase() || '';
+  if (ext === 'pdf') return 'application/pdf';
+  if (ext === 'png') return 'image/png';
+  if (ext === 'webp') return 'image/webp';
+  if (ext === 'heic' || ext === 'heif') return 'image/heic';
+  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+  return 'application/octet-stream';
+}
+
+/* ---------- iOS/Android share extension ---------- */
+
+type ShareParseFn = (payload: { filename: string; mimeType: string; data: string }) => Promise<void>;
+
+function ShareReceiver({
+  runParse,
+  onError,
+  onShowUpload,
+}: {
+  runParse: ShareParseFn;
+  onError: (msg: string) => void;
+  onShowUpload: () => void;
+}) {
+  const { resolvedSharedPayloads, isResolving, clearSharedPayloads } = useIncomingShare();
+  const handledRef = useRef(false);
+
+  useEffect(() => {
+    if (isResolving) return;
+    if (!resolvedSharedPayloads.length) {
+      handledRef.current = false;
+      return;
+    }
+    if (handledRef.current) return;
+
+    const payload = resolvedSharedPayloads.find((p) => 'contentUri' in p && p.contentUri) as
+      | { contentUri: string; contentMimeType?: string | null; originalName?: string | null }
+      | undefined;
+    const uri = payload ? payload.contentUri : null;
+    if (!uri) return;
+    handledRef.current = true;
+
+    (async () => {
+      try {
+        const b64 = await FileSystem.readAsStringAsync(uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        const mime = inferMime(uri, payload?.contentMimeType);
+        const name =
+          payload?.originalName ||
+          uri.split('/').pop() ||
+          `receipt-${Date.now()}`;
+        clearSharedPayloads();
+        await runParse({ filename: name, mimeType: mime, data: b64 });
+      } catch (e) {
+        handledRef.current = false;
+        onError('Could not read shared file: ' + (e as Error).message);
+        onShowUpload();
+      }
+    })();
+  }, [resolvedSharedPayloads, isResolving, clearSharedPayloads, runParse, onError, onShowUpload]);
+
+  return null;
+}
+
+class ShareBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
 
 export default function App() {
   return (
@@ -154,6 +236,7 @@ function Ledger() {
 
   const runParse = useCallback(
     async (payload: { filename: string; mimeType: string; data: string }) => {
+      if (parseBusy) return;
       setParseBusy(true);
       setParseError('');
       setParseNote('Parsing receipt…');
@@ -174,12 +257,13 @@ function Ledger() {
         setDetailVisible(true);
       } catch (e) {
         setParseError((e as Error).message);
+        setUploadVisible(true);
       } finally {
         setParseBusy(false);
         setParseNote('');
       }
     },
-    [receipts, refresh]
+    [parseBusy, receipts, refresh]
   );
 
   const pickAndParse = useCallback(async () => {
@@ -247,6 +331,13 @@ function Ledger() {
   /* ---------- render ---------- */
   return (
     <View style={[styles.app, { paddingTop: insets.top + 16 }]}>
+      <ShareBoundary>
+        <ShareReceiver
+          runParse={runParse}
+          onError={(msg) => setParseError(msg)}
+          onShowUpload={() => setUploadVisible(true)}
+        />
+      </ShareBoundary>
       {/* header readout */}
       <View style={styles.brandRow}>
         <Text style={styles.brand}>
@@ -383,6 +474,15 @@ function Ledger() {
           {parseError ? <Text style={styles.parseError}>{parseError}</Text> : null}
         </View>
       </BottomSheet>
+
+      {parseBusy && !uploadVisible ? (
+        <View style={styles.parseOverlay}>
+          <View style={styles.parseCard}>
+            <ActivityIndicator size="small" color={colors.textMain} />
+            <Text style={styles.parseOverlayText}>{parseNote || 'Parsing receipt…'}</Text>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -850,6 +950,30 @@ const styles = StyleSheet.create({
   optionText: { fontSize: 15, fontWeight: '500', color: colors.textMain },
   parseStatus: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 6 },
   parseNote: { fontSize: 13, color: colors.textMuted },
+
+  parseOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(250,250,250,0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+  },
+  parseCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.bgSurface,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+  },
+  parseOverlayText: { fontSize: 14, fontWeight: '500', color: colors.textMain },
   parseError: { marginTop: 10, fontSize: 13, color: colors.expense, textAlign: 'center' },
 
   monogramBox: {

@@ -12,8 +12,13 @@ DATA_DIR = Path(os.environ.get('DATA_DIR', '/app/data'))
 DB_PATH = DATA_DIR / 'receipts.db'
 INDEX_HTML = Path(os.environ.get('INDEX_HTML', '/app/index.html'))
 PORT = int(os.environ.get('PORT', '80'))
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
-GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '') or os.environ.get('GOOGLE_API_KEY', '')
+GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')
+GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent'
+OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '')
+OPENROUTER_MODEL = os.environ.get('OPENROUTER_MODEL', 'google/gemini-2.5-flash')
+OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
+LLM_PROVIDER = os.environ.get('LLM_PROVIDER', 'google').lower()
 MAX_BODY = 20 * 1024 * 1024
 
 PROMPT = """Extract the receipt data as strict JSON (no markdown, no extra text). Use this schema:
@@ -53,7 +58,30 @@ def merchant_for(vendor, stored):
     return match_merchant(vendor)
 
 
-def parse_with_gemini(req):
+def _extract_json_text(raw):
+    raw = raw.strip()
+    if raw.startswith('```'):
+        raw = re.sub(r'^```(?:json)?\s*', '', raw)
+        raw = re.sub(r'\s*```$', '', raw).strip()
+    return raw
+
+
+def _parse_json_response(raw):
+    raw = _extract_json_text(raw)
+    try:
+        return json.loads(raw)
+    except ValueError:
+        pass
+    m = re.search(r'\{.*\}', raw, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group(0))
+        except ValueError:
+            pass
+    raise RuntimeError('could not parse model JSON: %s' % raw[:200])
+
+
+def parse_with_google(req):
     if not GEMINI_API_KEY:
         raise RuntimeError('GEMINI_API_KEY is not set')
     body = {
@@ -70,18 +98,49 @@ def parse_with_gemini(req):
         'generationConfig': {'response_mime_type': 'application/json'},
     }
     r = urllib.request.Request(
-        GEMINI_URL,
+        GEMINI_URL % GEMINI_MODEL,
         data=json.dumps(body).encode('utf-8'),
         headers={'x-goog-api-key': GEMINI_API_KEY, 'Content-Type': 'application/json'},
         method='POST',
     )
     with urllib.request.urlopen(r, timeout=120) as resp:
         res = json.loads(resp.read().decode('utf-8'))
-    raw = res['candidates'][0]['content']['parts'][0]['text'].strip()
-    if raw.startswith('```'):
-        raw = re.sub(r'^```(?:json)?\s*', '', raw)
-        raw = re.sub(r'\s*```$', '', raw).strip()
-    return json.loads(raw)
+    raw = res['candidates'][0]['content']['parts'][0]['text']
+    return _parse_json_response(raw)
+
+
+def parse_with_openrouter(req):
+    if not OPENROUTER_API_KEY:
+        raise RuntimeError('OPENROUTER_API_KEY is not set')
+    mime = req.get('mimeType') or 'application/pdf'
+    data_url = 'data:%s;base64,%s' % (mime, req.get('data'))
+    body = {
+        'model': OPENROUTER_MODEL,
+        'messages': [{
+            'role': 'user',
+            'content': [
+                {'type': 'text', 'text': PROMPT},
+                {'type': 'image_url', 'image_url': {'url': data_url}},
+            ],
+        }],
+        'response_format': {'type': 'json_object'},
+    }
+    r = urllib.request.Request(
+        OPENROUTER_URL,
+        data=json.dumps(body).encode('utf-8'),
+        headers={'Authorization': 'Bearer %s' % OPENROUTER_API_KEY, 'Content-Type': 'application/json'},
+        method='POST',
+    )
+    with urllib.request.urlopen(r, timeout=180) as resp:
+        res = json.loads(resp.read().decode('utf-8'))
+    content = res['choices'][0]['message']['content']
+    return _parse_json_response(content)
+
+
+def parse_with_provider(req):
+    if LLM_PROVIDER == 'openrouter':
+        return parse_with_openrouter(req)
+    return parse_with_google(req)
 
 
 def get_db():
@@ -240,11 +299,11 @@ class Handler(BaseHTTPRequestHandler):
         conn = get_db()
 
         try:
-            parsed = parse_with_gemini(req)
+            parsed = parse_with_provider(req)
         except urllib.error.HTTPError as e:
             detail = e.read().decode('utf-8', 'replace')[:500]
             conn.close()
-            self.send_json(json.dumps({'error': 'gemini failed', 'status': e.code, 'detail': detail}).encode('utf-8'), 502)
+            self.send_json(json.dumps({'error': 'llm failed', 'status': e.code, 'detail': detail}).encode('utf-8'), 502)
             return
         except Exception as e:
             conn.close()
