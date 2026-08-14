@@ -8,9 +8,10 @@ from pathlib import Path
 import urllib.error
 import urllib.request
 
-DATA_DIR = Path('/app/data')
+DATA_DIR = Path(os.environ.get('DATA_DIR', '/app/data'))
 DB_PATH = DATA_DIR / 'receipts.db'
-INDEX_HTML = Path('/app/index.html')
+INDEX_HTML = Path(os.environ.get('INDEX_HTML', '/app/index.html'))
+PORT = int(os.environ.get('PORT', '80'))
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
 MAX_BODY = 20 * 1024 * 1024
@@ -27,6 +28,29 @@ PROMPT = """Extract the receipt data as strict JSON (no markdown, no extra text)
   "total": number
 }
 Rules: "items" is a line-by-line breakdown of every purchased item. Include every VAT rate as a separate tax entry. Never guess - use null when a field cannot be determined."""
+
+
+MERCHANTS_PATH = Path(os.environ.get('MERCHANTS_PATH', str(Path(__file__).resolve().parent / 'merchants.json')))
+MERCHANTS = []
+if MERCHANTS_PATH.exists():
+    MERCHANTS = json.loads(MERCHANTS_PATH.read_text('utf-8')).get('merchants', [])
+
+
+def match_merchant(vendor):
+    if not vendor:
+        return 'other'
+    v = vendor.lower()
+    for m in MERCHANTS:
+        for alias in m.get('aliases', []):
+            if alias in v:
+                return m['key']
+    return 'other'
+
+
+def merchant_for(vendor, stored):
+    if stored and stored != 'other':
+        return stored
+    return match_merchant(vendor)
 
 
 def parse_with_gemini(req):
@@ -87,19 +111,24 @@ def get_db():
         conn.execute('DROP TABLE receipts')
         conn.execute('ALTER TABLE receipts_new RENAME TO receipts')
         conn.commit()
+    cols = [r[1] for r in conn.execute('PRAGMA table_info(receipts)').fetchall()]
+    if 'merchant' not in cols:
+        conn.execute("ALTER TABLE receipts ADD COLUMN merchant TEXT DEFAULT 'other'")
+        conn.commit()
     return conn
 
 
 def compute_summary():
-    conn = sqlite3.connect(DB_PATH)
-    rows = conn.execute('SELECT result FROM receipts').fetchall()
+    conn = get_db()
+    rows = conn.execute('SELECT result, merchant FROM receipts').fetchall()
     conn.close()
 
     totals = {}
     vendors = {}
+    merchants = {}
     months = {}
     count = 0
-    for (res,) in rows:
+    for res, merchant in rows:
         try:
             p = json.loads(res)
         except ValueError:
@@ -117,12 +146,17 @@ def compute_summary():
             v['count'] += 1
             v['total'][currency] = v['total'].get(currency, 0) + amount
 
+        key = merchant_for(vendor, merchant)
+        m = merchants.setdefault(key, {'count': 0, 'total': {}})
+        m['count'] += 1
+        m['total'][currency] = m['total'].get(currency, 0) + amount
+
         date = p.get('invoice_date')
         if date and len(date) >= 7:
             month = date[:7]
             months[month] = months.get(month, 0) + amount
 
-    return {'count': count, 'total': totals, 'by_vendor': vendors, 'by_month': months}
+    return {'count': count, 'total': totals, 'by_vendor': vendors, 'by_merchant': merchants, 'by_month': months}
 
 
 def store_summary():
@@ -155,14 +189,20 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == '/api/receipts':
             conn = get_db()
             rows = conn.execute(
-                'SELECT filename, mime_type, created_at, result FROM receipts ORDER BY created_at DESC'
+                'SELECT id, filename, mime_type, created_at, result, merchant FROM receipts ORDER BY id DESC'
             ).fetchall()
             conn.close()
             payload = json.dumps([
-                {'filename': r[0], 'mimeType': r[1], 'createdAt': r[2], 'parsed': json.loads(r[3])}
+                {
+                    'id': r[0], 'filename': r[1], 'mimeType': r[2], 'createdAt': r[3],
+                    'parsed': json.loads(r[4]),
+                    'merchant': merchant_for(json.loads(r[4]).get('vendor'), r[5]),
+                }
                 for r in rows
             ]).encode('utf-8')
             self.send_json(payload)
+        elif self.path == '/api/merchants':
+            self.send_json(json.dumps({'merchants': MERCHANTS}).encode('utf-8'))
         elif self.path == '/api/summary':
             conn = get_db()
             row = conn.execute('SELECT value, updated_at FROM summary WHERE key = ?', ('user',)).fetchone()
@@ -211,14 +251,31 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(json.dumps({'error': 'parse failed', 'detail': str(e)}).encode('utf-8'), 502)
             return
 
-        conn.execute(
-            'INSERT INTO receipts (filename, result, mime_type) VALUES (?, ?, ?)',
-            (filename, json.dumps(parsed), req.get('mimeType', '')),
+        cur = conn.execute(
+            'INSERT INTO receipts (filename, result, mime_type, merchant) VALUES (?, ?, ?, ?)',
+            (filename, json.dumps(parsed), req.get('mimeType', ''), match_merchant(parsed.get('vendor'))),
         )
+        new_id = cur.lastrowid
         conn.commit()
         conn.close()
         threading.Thread(target=store_summary, daemon=True).start()
-        self.send_json(json.dumps({'parsed': parsed}).encode('utf-8'))
+        self.send_json(json.dumps({'parsed': parsed, 'merchant': match_merchant(parsed.get('vendor')), 'id': new_id}).encode('utf-8'))
+
+    def do_DELETE(self):
+        m = re.match(r'^/api/receipts/(\d+)$', self.path)
+        if not m:
+            self.send_json(json.dumps({'error': 'not found'}).encode('utf-8'), 404)
+            return
+        rid = int(m.group(1))
+        conn = get_db()
+        cur = conn.execute('DELETE FROM receipts WHERE id = ?', (rid,))
+        conn.commit()
+        conn.close()
+        if cur.rowcount == 0:
+            self.send_json(json.dumps({'error': 'not found'}).encode('utf-8'), 404)
+            return
+        threading.Thread(target=store_summary, daemon=True).start()
+        self.send_json(b'{}')
 
     def send_json(self, payload, code=200):
         self.send_response(code)
@@ -232,6 +289,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == '__main__':
-    print('receipt-upload backend listening on :80')
+    get_db()
+    print(f'receipt-upload backend listening on :{PORT}')
     threading.Thread(target=store_summary, daemon=True).start()
-    ThreadingHTTPServer(('0.0.0.0', 80), Handler).serve_forever()
+    ThreadingHTTPServer(('0.0.0.0', PORT), Handler).serve_forever()

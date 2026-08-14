@@ -15,6 +15,7 @@ Each service runs behind its own Tailscale sidecar, reachable at a proper HTTPS 
 | [Paperless-ngx](https://docs.paperless-ngx.com/) | Document management | `https://docs.<tailnet-domain>` |
 | [n8n](https://n8n.io/) | Workflow automation | `https://n8n.<tailnet-domain>` |
 | Receipt uploader | Upload receipts that get parsed by Gemini via n8n | `https://receipt.<tailnet-domain>` |
+| [Ledger](mobile/) | Expo (React Native) app for the receipt uploader | `npx expo start` |
 
 ## Architecture
 

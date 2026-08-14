@@ -2,204 +2,583 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Receipt Parser</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Ledger — Receipts</title>
 <style>
+  :root {
+    --bg-app: #FAFAFA;
+    --bg-surface: #FFFFFF;
+    --border-subtle: #E5E5E5;
+    --bg-icon: #F4F4F5;
+    --icon: #52525B;
+    --scrim: rgba(10, 10, 10, 0.4);
+
+    --text-main: #0A0A0A;
+    --text-muted: #737373;
+
+    --color-income: #0D9488;
+    --color-expense: #E11D48;
+
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+    --touch-target-min: 48px;
+    --sheet-radius: 16px;
+  }
+
   * { box-sizing: border-box; }
+  html, body { margin: 0; }
   body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: #0f172a;
-    color: #e2e8f0;
+    background: var(--bg-app);
+    color: var(--text-main);
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font-family: var(--font); }
+  input, select, textarea { font-size: 16px; }
+
+  .app {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 28px 20px 140px;
+  }
+
+  /* ---------- header readout (hard-reach, read-only) ---------- */
+  .brand-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .brand { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  .brand .dot { color: var(--color-expense); }
+  .hide-btn {
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+    color: var(--text-muted);
+    border-radius: 999px;
+    font-size: 13px;
+    padding: 7px 12px;
+    min-height: 32px;
+    cursor: pointer;
+    transition: border-color 120ms ease, color 120ms ease;
+  }
+  .hide-btn:hover { border-color: var(--text-main); color: var(--text-main); }
+
+  .hero-label {
+    font-size: 14px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+  }
+  .hero-total {
+    display: inline-block;
+    font-size: 30px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    cursor: pointer;
+    user-select: none;
+  }
+  .hero-sub { margin-top: 4px; font-size: 15px; color: var(--text-muted); }
+  .hero-sub b { color: var(--color-expense); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+  /* ---------- merchant filter pills ---------- */
+  .merchants {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 14px 0 14px;
+    margin: 0 -20px;
+    padding-left: 20px;
+    padding-right: 20px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .merchants::-webkit-scrollbar { display: none; }
+  .pill {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-shrink: 0;
+    min-height: 36px;
+    padding: 0 14px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    background: var(--bg-surface);
+    color: var(--text-main);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  }
+  .pill img { width: 15px; height: 15px; display: block; }
+  .pill .cnt { color: var(--text-muted); font-variant-numeric: tabular-nums; font-weight: 500; }
+  .pill.active { background: var(--text-main); border-color: var(--text-main); color: #FFFFFF; }
+  .pill.active .cnt { color: rgba(255, 255, 255, 0.7); }
+  .pill.active .monogram { color: rgba(255, 255, 255, 0.85); }
+
+  /* ---------- feed ---------- */
+  .list-head {
+    display: flex;
+    justify-content: space-between;
+    padding: 16px 2px 10px;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 14px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+  }
+  .list { display: flex; flex-direction: column; }
+  .list-empty { padding: 20px 2px; font-size: 14px; color: var(--text-muted); }
+
+  .row { position: relative; overflow: hidden; touch-action: pan-y; }
+  .swipe-delete {
+    position: absolute;
+    inset: 0;
+    background: var(--color-expense);
+    color: #FFFFFF;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 20px;
+    font-size: 14px;
+    font-weight: 500;
+    opacity: 0;
+    transition: opacity 160ms ease;
+  }
+  .row-body {
+    position: relative;
+    display: grid;
+    grid-template-columns: 40px 1fr auto;
+    gap: 12px;
+    align-items: center;
+    min-height: var(--touch-target-min);
+    padding: 10px 4px;
+    background: var(--bg-app);
+    border-bottom: 1px solid var(--border-subtle);
+    cursor: pointer;
+    user-select: none;
+    transition: background 120ms ease;
+  }
+  .row-body:hover { background: var(--bg-surface); }
+  .row.active .row-body { background: var(--bg-icon); }
+  .row-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: var(--bg-icon);
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 100vh;
-    padding: 24px;
+    color: var(--icon);
   }
-  .card {
-    width: 100%;
-    max-width: 640px;
-    background: #1e293b;
-    border: 1px solid #334155;
-    border-radius: 12px;
-    padding: 24px;
-  }
-  h1 { margin: 0 0 4px; font-size: 1.4rem; }
-  .sub { margin: 0 0 20px; color: #94a3b8; font-size: .9rem; }
-  .summary-bar {
-    display: none;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 16px;
-  }
-  .summary-bar.show { display: flex; }
-  .stat {
-    background: #0f172a;
-    border: 1px solid #334155;
-    border-radius: 8px;
-    padding: 8px 14px;
-    font-size: .8rem;
-    color: #94a3b8;
-  }
-  .stat b { color: #e2e8f0; font-size: .95rem; }
-  .drop {
-    border: 2px dashed #475569;
-    border-radius: 8px;
-    padding: 28px;
-    text-align: center;
-    cursor: pointer;
-    color: #94a3b8;
-    transition: border-color .15s, color .15s;
-  }
-  .drop.dragover, .drop:hover { border-color: #38bdf8; color: #e2e8f0; }
-  .file-meta {
-    display: none;
-    margin-top: 12px;
-    padding: 10px 12px;
-    background: #0f172a;
-    border-radius: 6px;
-    font-size: .85rem;
-    word-break: break-all;
-  }
-  .file-meta.show { display: block; }
-  button {
-    width: 100%;
-    margin-top: 16px;
-    padding: 12px;
-    border: none;
-    border-radius: 8px;
-    background: #0ea5e9;
-    color: #0f172a;
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer;
-  }
-  button:disabled { background: #475569; color: #94a3b8; cursor: not-allowed; }
-  .status {
-    display: none;
-    margin-top: 16px;
-    font-size: .85rem;
-    color: #38bdf8;
-  }
-  .status.show { display: block; }
-  .status.error { color: #f87171; }
-  .summary {
-    display: none;
-    margin-top: 16px;
-    background: #0f172a;
-    border: 1px solid #334155;
-    border-radius: 6px;
-    padding: 16px;
-  }
-  .summary.show { display: block; }
-  .summary h3 { margin: 0 0 10px; }
-  .badge {
+  .row-icon img { width: 22px; height: 22px; display: block; }
+  .monogram { display: flex; align-items: center; justify-content: center; font-weight: 600; color: var(--icon); }
+  .row-main { min-width: 0; }
+  .row-name { font-size: 15px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; display: flex; align-items: center; gap: 6px; }
+  .row-meta .date { white-space: nowrap; }
+  .tag {
     display: inline-block;
-    padding: 2px 8px;
-    border-radius: 10px;
-    background: #334155;
-    color: #94a3b8;
-    font-size: .7rem;
-    vertical-align: middle;
-    margin-left: 8px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--bg-icon);
+    color: var(--text-muted);
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 40%;
   }
-  .kv { display: flex; justify-content: space-between; margin: 4px 0; font-size: .9rem; }
-  .kv b { color: #94a3b8; font-weight: 500; }
-  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: .85rem; }
-  th, td { text-align: left; padding: 6px 8px; border-top: 1px solid #334155; }
-  th { color: #94a3b8; font-weight: 500; }
-  td.num, th.num { text-align: right; }
-  .total { border-top: 2px solid #475569; font-weight: 600; }
-  .history { margin-top: 16px; border-top: 1px solid #334155; padding-top: 12px; }
-  .history h3 { margin: 0 0 8px; font-size: .95rem; color: #94a3b8; }
-  .hist-row {
+  .row-amt {
+    font-size: 16px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-expense);
+    white-space: nowrap;
+  }
+
+  /* ---------- bottom action bar (thumb zone) ---------- */
+  .appbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    background: var(--bg-app);
+    border-top: 1px solid var(--border-subtle);
+    padding: 12px 20px calc(12px + env(safe-area-inset-bottom));
+  }
+  .appbar-inner { max-width: 760px; margin: 0 auto; }
+  .primary {
+    width: 100%;
+    min-height: 52px;
+    border: none;
+    border-radius: 14px;
+    background: var(--text-main);
+    color: #FFFFFF;
+    font-size: 15px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: opacity 120ms ease, transform 60ms ease;
+  }
+  .primary:active { transform: scale(0.985); }
+  .primary:hover { opacity: 0.92; }
+  .primary:disabled { background: var(--bg-icon); color: var(--text-muted); cursor: default; transform: none; }
+  .primary .plus { font-size: 20px; font-weight: 500; line-height: 1; }
+
+  /* ---------- bottom sheets ---------- */
+  .scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: var(--scrim);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 220ms ease, visibility 220ms ease;
+  }
+  .scrim.open { opacity: 1; visibility: visible; }
+  .sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    max-height: 88vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background: var(--bg-surface);
+    border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
+    border-top: 1px solid var(--border-subtle);
+    transform: translateY(105%);
+    visibility: hidden;
+    transition: transform 240ms cubic-bezier(0.32, 0.72, 0, 1), visibility 240ms ease;
+    padding: 10px 24px calc(24px + env(safe-area-inset-bottom));
+  }
+  .sheet.open { transform: translateY(0); visibility: visible; }
+  .sheet-inner { max-width: 560px; margin: 0 auto; }
+  .handle {
+    width: 40px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--border-subtle);
+    margin: 0 auto 18px;
+  }
+
+  /* ---------- sheet: detail ---------- */
+  .r-head {
     display: flex;
     justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .r-id { display: flex; gap: 12px; align-items: center; min-width: 0; }
+  .r-icon {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    border-radius: 11px;
+    background: var(--bg-icon);
+    display: flex;
     align-items: center;
-    padding: 8px 10px;
-    border-radius: 6px;
+    justify-content: center;
+    color: var(--icon);
+  }
+  .r-icon img { width: 24px; height: 24px; display: block; }
+  .r-vendor { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+  .r-date { font-size: 13px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .r-delete {
+    flex-shrink: 0;
+    border: none;
+    background: none;
+    padding: 8px;
+    min-width: var(--touch-target-min);
+    min-height: var(--touch-target-min);
+    font-size: 13px;
+    color: var(--text-muted);
     cursor: pointer;
-    font-size: .85rem;
+    border-radius: 8px;
+    transition: color 120ms ease, background 120ms ease;
   }
-  .hist-row:hover { background: #0f172a; }
-  .hist-main { display: flex; flex-direction: column; }
-  .hist-date { color: #64748b; font-size: .75rem; }
-  .hist-total { font-weight: 600; }
-  pre {
+  .r-delete:hover { color: var(--color-expense); background: var(--bg-icon); }
+
+  .r-meta {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .m-item span { display: block; font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .m-item b { font-weight: 500; font-size: 14px; word-break: break-word; }
+
+  table.items { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  table.items th {
+    text-align: left;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    padding: 10px 6px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  table.items td { padding: 9px 6px; border-bottom: 1px solid var(--border-subtle); font-size: 14px; }
+  table.items td.num, table.items th.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+  }
+  table.items tbody tr:last-child td { border-bottom: none; }
+
+  .totals { margin-top: 12px; margin-left: auto; max-width: 320px; }
+  .t-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 14px; }
+  .t-row span { color: var(--text-muted); }
+  .t-row b { font-variant-numeric: tabular-nums; font-weight: 500; }
+  .t-row.total {
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--text-main);
+    font-size: 15px;
+  }
+  .t-row.total b { font-size: 18px; font-weight: 600; }
+
+  .r-foot {
+    margin-top: 22px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  /* ---------- sheet: upload ---------- */
+  .dz-title { margin: 0; font-size: 15px; font-weight: 500; text-align: center; }
+  .dz-sub { margin: 4px 0 0; font-size: 13px; color: var(--text-muted); text-align: center; }
+  .dropzone {
+    margin-top: 8px;
+    border: 1px dashed var(--border-subtle);
+    border-radius: 12px;
+    padding: 28px 18px;
+    cursor: pointer;
+    transition: border-color 120ms ease, background 120ms ease;
+  }
+  .dropzone:hover, .dropzone.dragover { border-color: var(--text-main); background: var(--bg-app); }
+  .file-row { display: none; margin-top: 14px; font-size: 13px; color: var(--text-muted); word-break: break-word; }
+  .file-row.show { display: block; }
+  .file-row b { color: var(--text-main); font-weight: 500; }
+  .parse-btn {
+    width: 100%;
+    min-height: 52px;
+    margin-top: 14px;
+    border: none;
+    border-radius: 14px;
+    background: var(--text-main);
+    color: #FFFFFF;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
     display: none;
-    margin: 16px 0 0;
-    padding: 12px;
-    background: #0f172a;
-    border: 1px solid #334155;
-    border-radius: 6px;
-    overflow-x: auto;
-    font-size: .8rem;
-    line-height: 1.5;
-    white-space: pre-wrap;
-    word-break: break-word;
+    transition: opacity 120ms ease;
   }
-  pre.show { display: block; }
+  .parse-btn.show { display: block; }
+  .parse-btn:hover { opacity: 0.92; }
+  .parse-btn:disabled { background: var(--bg-icon); color: var(--text-muted); cursor: default; }
+  .status { display: none; margin-top: 12px; font-size: 13px; color: var(--text-muted); }
+  .status.show { display: block; }
+  .status.error { color: var(--color-expense); }
+
+  a:focus-visible, button:focus-visible, .row-body:focus-visible, .hero-total:focus-visible {
+    outline: 2px solid var(--color-income);
+    outline-offset: 2px;
+  }
+
+  @media (min-width: 760px) {
+    .app { padding-top: 48px; }
+    .hero-total { font-size: 32px; }
+    .sheet { left: 50%; transform: translateX(-50%) translateY(105%); max-width: 560px; }
+    .sheet.open { transform: translateX(-50%) translateY(0); }
+  }
 </style>
 </head>
 <body>
-  <div class="card">
-    <h1>Receipt Parser</h1>
-    <p class="sub">Upload a receipt (PDF or image) — it gets parsed by Gemini and the breakdown is returned.</p>
+<div class="app">
+  <header>
+    <div class="brand-row">
+      <span class="brand">Ledger<span class="dot">.</span></span>
+      <button id="hide" class="hide-btn" type="button">Hide</button>
+    </div>
+    <div class="hero-label">Total spend</div>
+    <div id="hero-total" class="hero-total" title="Tap to toggle visibility" tabindex="0">—</div>
+    <div id="hero-sub" class="hero-sub"></div>
+  </header>
 
-    <div id="summary-bar" class="summary-bar"></div>
+  <nav id="merchants-pills" class="merchants" aria-label="Filter by merchant"></nav>
 
-    <div id="drop" class="drop">Drag &amp; drop a file here, or click to browse</div>
-    <input id="file" type="file" hidden accept="application/pdf,image/png,image/jpeg,image/webp" />
-
-    <div id="meta" class="file-meta"></div>
-
-    <button id="parse" disabled>Parse receipt</button>
-
-    <div id="status" class="status"></div>
-
-    <div id="summary" class="summary"></div>
-
-    <pre id="out"></pre>
-
-    <div id="history" class="history"></div>
+  <div class="feed">
+    <div class="list-head">
+      <span>Recent</span>
+      <span id="list-count"></span>
+    </div>
+    <div id="history" class="list"></div>
   </div>
+</div>
+
+<div class="appbar">
+  <div class="appbar-inner">
+    <button id="open-upload" class="primary" type="button"><span class="plus">+</span> Upload receipt</button>
+  </div>
+</div>
+
+<div id="scrim-detail" class="scrim"></div>
+<section id="sheet-detail" class="sheet" aria-hidden="true" aria-label="Receipt detail">
+  <div class="sheet-inner">
+    <div class="handle"></div>
+    <div class="r-head">
+      <div class="r-id">
+        <span id="r-merchant-icon" class="r-icon"></span>
+        <div>
+          <h2 id="r-vendor" class="r-vendor"></h2>
+          <div id="r-date" class="r-date"></div>
+        </div>
+      </div>
+      <button id="r-delete" class="r-delete" type="button">Delete</button>
+    </div>
+    <div class="r-meta">
+      <div class="m-item"><span>Invoice</span><b id="r-invoice">—</b></div>
+      <div class="m-item"><span>Currency</span><b id="r-currency">—</b></div>
+      <div class="m-item"><span>File</span><b id="r-file">—</b></div>
+    </div>
+    <table class="items">
+      <thead>
+        <tr><th>Item</th><th class="num">Qty</th><th class="num">Unit</th><th class="num">Total</th></tr>
+      </thead>
+      <tbody id="r-items"></tbody>
+    </table>
+    <div class="totals">
+      <div class="t-row"><span>Subtotal</span><b id="r-subtotal">—</b></div>
+      <div id="r-tax"></div>
+      <div class="t-row total"><span>Total</span><b id="r-total">—</b></div>
+    </div>
+    <div class="r-foot">
+      <span>Parsed by Gemini</span>
+      <span>Stored in SQLite</span>
+    </div>
+  </div>
+</section>
+
+<div id="scrim-upload" class="scrim"></div>
+<section id="sheet-upload" class="sheet" aria-hidden="true" aria-label="Upload a receipt">
+  <div class="sheet-inner">
+    <div class="handle"></div>
+    <div class="dropzone" id="drop" role="button" tabindex="0">
+      <p class="dz-title">Drop a receipt</p>
+      <p class="dz-sub">PDF or photo · parsed by Gemini</p>
+      <input id="file" type="file" hidden accept="application/pdf,image/png,image/jpeg,image/webp" />
+    </div>
+    <div id="meta" class="file-row"></div>
+    <button id="parse" class="parse-btn" type="button" disabled>Parse receipt</button>
+    <div id="status" class="status"></div>
+  </div>
+</section>
 
 <script>
-  const API_URL = '/api/parse';
-  const euro = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' });
-  const money = (v) => (v == null || isNaN(v) ? '—' : euro.format(v));
-  const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
-  const drop = document.getElementById('drop');
-  const fileInput = document.getElementById('file');
-  const meta = document.getElementById('meta');
-  const btn = document.getElementById('parse');
-  const status = document.getElementById('status');
-  const summary = document.getElementById('summary');
-  const out = document.getElementById('out');
-  const history = document.getElementById('history');
-  const summaryBar = document.getElementById('summary-bar');
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const money = (v, cur) => {
+    if (v == null || isNaN(v)) return '—';
+    try { return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur || 'EUR' }).format(v); }
+    catch (_) { return v; }
+  };
 
   let selected = null;
+  let receipts = [];
+  let activeId = null;
+  let hiddenBalance = false;
+  let balanceText = '—';
+  let merchants = {};
+  let summary = null;
+  let filterKey = 'all';
+
+  const heroTotal = $('hero-total');
+
+  function monogram(key, size) {
+    const s = document.createElement('span');
+    s.className = 'monogram';
+    s.style.width = s.style.height = size + 'px';
+    s.style.fontSize = Math.round(size * 0.5) + 'px';
+    s.textContent = ((merchants[key] && merchants[key].name) || key).charAt(0).toUpperCase();
+    return s;
+  }
+
+  function merchantIcon(key, size) {
+    const m = merchants[key];
+    if (m && m.icon) {
+      const img = document.createElement('img');
+      img.width = img.height = size;
+      img.alt = '';
+      img.loading = 'lazy';
+      img.src = 'https://cdn.simpleicons.org/' + encodeURIComponent(m.icon) + '/0A0A0A';
+      img.onerror = () => img.replaceWith(monogram(key, size));
+      return img;
+    }
+    return monogram(key, size);
+  }
+
+  /* ---------- sheets ---------- */
+  function openSheet(sheet, scrim) {
+    sheet.classList.add('open');
+    sheet.setAttribute('aria-hidden', 'false');
+    scrim.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeSheet(sheet, scrim) {
+    sheet.classList.remove('open');
+    sheet.setAttribute('aria-hidden', 'true');
+    scrim.classList.remove('open');
+    if (!$('sheet-detail').classList.contains('open') && !$('sheet-upload').classList.contains('open')) {
+      document.body.style.overflow = '';
+    }
+  }
+  $('scrim-detail').addEventListener('click', () => closeSheet($('sheet-detail'), $('scrim-detail')));
+  $('scrim-upload').addEventListener('click', () => closeSheet($('sheet-upload'), $('scrim-upload')));
+  $('open-upload').addEventListener('click', () => {
+    openSheet($('sheet-upload'), $('scrim-upload'));
+  });
+
+  /* ---------- privacy toggle ---------- */
+  function refreshBalance() {
+    heroTotal.textContent = hiddenBalance ? '••••••' : balanceText;
+  }
+  heroTotal.addEventListener('click', () => { hiddenBalance = !hiddenBalance; refreshBalance(); });
+  heroTotal.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); hiddenBalance = !hiddenBalance; refreshBalance(); } });
+  $('hide').addEventListener('click', () => { hiddenBalance = !hiddenBalance; refreshBalance(); });
+
+  /* ---------- upload ---------- */
+  const drop = $('drop'), fileInput = $('file'), meta = $('meta'), btn = $('parse'), status = $('status');
 
   function setFile(f) {
     if (!f) return;
     selected = f;
-    meta.textContent = f.name + ' — ' + (f.size / 1024).toFixed(1) + ' KB';
     meta.classList.add('show');
+    meta.innerHTML = 'Selected: <b>' + esc(f.name) + '</b> · ' + (f.size / 1024).toFixed(1) + ' KB';
+    btn.classList.add('show');
     btn.disabled = false;
   }
 
   drop.addEventListener('click', () => fileInput.click());
+  drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
   fileInput.addEventListener('change', () => setFile(fileInput.files[0]));
   drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('dragover'); });
   drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
-  drop.addEventListener('drop', (e) => {
-    e.preventDefault();
-    drop.classList.remove('dragover');
-    setFile(e.dataTransfer.files[0]);
-  });
+  drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('dragover'); setFile(e.dataTransfer.files[0]); });
 
   function showStatus(msg, isError) {
     status.textContent = msg;
@@ -207,37 +586,9 @@
     status.classList.add('show');
   }
 
-  function renderSummary(p, cached) {
-    const taxRows = (p.tax || []).map((t) =>
-      '<div class="kv"><b>VAT ' + (t.rate_percent ?? '?') + '%</b><span>' + money(t.amount) + '</span></div>'
-    ).join('');
-
-    const itemRows = (p.items || []).map((it) =>
-      '<tr>' +
-        '<td>' + (it.name || '—') + '</td>' +
-        '<td class="num">' + (it.quantity ?? '') + '</td>' +
-        '<td class="num">' + money(it.unit_price) + '</td>' +
-        '<td class="num">' + money(it.total) + '</td>' +
-      '</tr>'
-    ).join('');
-
-    summary.innerHTML =
-      '<h3>' + (p.vendor || 'Unknown vendor') +
-        (cached ? '<span class="badge">cached</span>' : '') + '</h3>' +
-      '<div class="kv"><b>Date</b><span>' + (p.invoice_date || '—') + '</span></div>' +
-      '<div class="kv"><b>Invoice #</b><span>' + (p.invoice_number || '—') + '</span></div>' +
-      (p.items.length ? '<table><tr><th>Item</th><th class="num">Qty</th><th class="num">Unit</th><th class="num">Total</th></tr>' + itemRows + '</table>' : '') +
-      (taxRows ? taxRows : '') +
-      '<div class="kv total"><b>Total</b><span>' + money(p.total) + ' ' + (p.currency || '') + '</span></div>';
-    summary.classList.add('show');
-    out.classList.remove('show');
-  }
-
   btn.addEventListener('click', async () => {
     if (!selected) return;
     btn.disabled = true;
-    summary.classList.remove('show');
-    out.classList.remove('show');
     try {
       showStatus('Reading file…');
       const reader = new FileReader();
@@ -248,7 +599,7 @@
       });
 
       showStatus('Parsing…');
-      const res = await fetch(API_URL, {
+      const res = await fetch('/api/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -257,13 +608,24 @@
           data: data.split(',')[1]
         })
       });
-      if (!res.ok) throw new Error(await res.text().then((t) => 'HTTP ' + res.status + ': ' + t.slice(0, 300)));
+      if (!res.ok) throw new Error((await res.text()).slice(0, 300));
       const json = await res.json();
 
+      closeSheet($('sheet-upload'), $('scrim-upload'));
       status.classList.remove('show');
-      renderSummary(json.parsed, json.cached !== undefined ? json.cached : false);
-      loadHistory();
-      loadSummary();
+      meta.classList.remove('show');
+      btn.classList.remove('show');
+
+      await Promise.all([loadHistory(), loadSummary()]);
+      const fresh = receipts.find((r) => r.id === json.id);
+      const parsed = json.parsed;
+      const key = json.merchant || 'other';
+      if (fresh) {
+        activeId = fresh.id;
+        renderDetail(parsed, selected.name, key);
+        renderList();
+        openSheet($('sheet-detail'), $('scrim-detail'));
+      }
     } catch (err) {
       showStatus('Failed: ' + err.message, true);
     } finally {
@@ -271,29 +633,195 @@
     }
   });
 
+  /* ---------- ledger ---------- */
+  function renderList() {
+    const shown = receipts.filter((r) => filterKey === 'all' || (r.merchant || 'other') === filterKey);
+    listCount.textContent = shown.length ? shown.length + ' receipts' : '';
+    if (!receipts.length) {
+      historyEl.innerHTML = '<div class="list-empty">No receipts logged yet — tap Upload receipt to start.</div>';
+      return;
+    }
+    if (!shown.length) {
+      historyEl.innerHTML = '<div class="list-empty">No receipts for this merchant.</div>';
+      return;
+    }
+    historyEl.innerHTML = '';
+    shown.forEach((r) => {
+      const p = r.parsed || {};
+      const row = document.createElement('div');
+      row.className = 'row' + (r.id === activeId ? ' active' : '');
+      row.dataset.id = r.id;
+      row.innerHTML =
+        '<div class="swipe-delete">Delete</div>' +
+        '<div class="row-body" tabindex="0">' +
+          '<div class="row-icon"></div>' +
+          '<div class="row-main">' +
+            '<div class="row-name">' + esc(p.vendor || r.filename) + '</div>' +
+            '<div class="row-meta">' +
+              '<span class="date">' + (p.invoice_date ? esc(p.invoice_date) : '') + '</span>' +
+              '<span class="tag">' + esc((merchants[r.merchant] && merchants[r.merchant].name) || r.merchant || 'other') + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="row-amt">' + money(p.total, p.currency) + '</div>' +
+        '</div>';
+      row.querySelector('.row-icon').appendChild(merchantIcon(r.merchant || 'other', 22));
+      row.querySelector('.row-body').addEventListener('click', () => selectReceipt(r));
+      row.querySelector('.row-body').addEventListener('keydown', (e) => { if (e.key === 'Enter') selectReceipt(r); });
+      attachSwipe(row, () => removeReceipt(r.id));
+      historyEl.appendChild(row);
+    });
+  }
+
+  function selectReceipt(r) {
+    activeId = r.id;
+    renderList();
+    renderDetail(r.parsed || {}, r.filename, r.merchant || 'other');
+    openSheet($('sheet-detail'), $('scrim-detail'));
+  }
+
+  /* ---------- swipe-to-delete ---------- */
+  function attachSwipe(row, onDelete) {
+    const body = row.querySelector('.row-body');
+    const del = row.querySelector('.swipe-delete');
+    const W = 92;
+    let open = false, tracking = false, startX = 0, moved = 0, vibrated = false;
+
+    const reset = (animate) => {
+      open = false; vibrated = false;
+      body.style.transition = animate ? 'transform 160ms ease' : 'none';
+      body.style.transform = 'translateX(0)';
+      del.style.opacity = '0';
+    };
+
+    row.addEventListener('pointerdown', (e) => {
+      if (open) { reset(true); return; }
+      tracking = true; vibrated = false; moved = 0;
+      startX = e.clientX;
+      body.style.transition = 'none';
+    });
+    row.addEventListener('pointermove', (e) => {
+      if (!tracking) return;
+      const dx = e.clientX - startX;
+      moved = Math.max(moved, Math.abs(dx));
+      if (dx > 0) return;
+      const x = Math.max(-W - 12, dx);
+      body.style.transform = 'translateX(' + x + 'px)';
+      del.style.opacity = Math.min(1, Math.abs(x) / W);
+      if (x < -W * 0.6 && !vibrated) {
+        vibrated = true;
+        if (navigator.vibrate) navigator.vibrate(10);
+      }
+    });
+    const end = (e) => {
+      if (!tracking) return;
+      tracking = false;
+      const dx = e.clientX - startX;
+      if (moved < 10) { reset(true); selectReceipt(byId(row.dataset.id)); return; }
+      open = dx < -W * 0.4;
+      body.style.transition = 'transform 160ms ease';
+      body.style.transform = open ? 'translateX(-' + W + 'px)' : 'translateX(0)';
+      del.style.opacity = open ? '1' : '0';
+    };
+    row.addEventListener('pointerup', end);
+    row.addEventListener('pointercancel', () => { tracking = false; reset(true); });
+    del.addEventListener('click', (e) => { e.stopPropagation(); onDelete(); });
+  }
+
+  function byId(id) {
+    return receipts.find((r) => r.id === Number(id));
+  }
+
+  async function removeReceipt(id) {
+    if (!confirm('Delete this receipt?')) return;
+    try {
+      const res = await fetch('/api/receipts/' + id, { method: 'DELETE' });
+      if (!res.ok) throw new Error('delete failed');
+      if (activeId === id) {
+        activeId = null;
+        closeSheet($('sheet-detail'), $('scrim-detail'));
+      }
+      await Promise.all([loadHistory(), loadSummary()]);
+    } catch (err) {
+      alert('Delete failed: ' + err.message);
+    }
+  }
+
+  /* ---------- detail ---------- */
+  function renderDetail(p, file, merchantKey) {
+    $('r-vendor').textContent = p.vendor || 'Unknown vendor';
+    $('r-date').textContent = p.invoice_date || '';
+    $('r-invoice').textContent = p.invoice_number || '—';
+    $('r-currency').textContent = p.currency || '—';
+    $('r-file').textContent = file || '—';
+
+    const cur = p.currency;
+    $('r-items').innerHTML = (p.items || []).map((it) =>
+      '<tr>' +
+        '<td>' + esc(it.name || '—') + '</td>' +
+        '<td class="num">' + (it.quantity ?? '') + '</td>' +
+        '<td class="num">' + money(it.unit_price, cur) + '</td>' +
+        '<td class="num">' + money(it.total, cur) + '</td>' +
+      '</tr>'
+    ).join('');
+    $('r-subtotal').textContent = money(p.subtotal, cur);
+    $('r-tax').innerHTML = (p.tax || []).map((t) =>
+      '<div class="t-row"><span>VAT ' + (t.rate_percent ?? '?') + '%</span><b>' + money(t.amount, cur) + '</b></div>'
+    ).join('');
+    $('r-total').textContent = money(p.total, cur);
+
+    $('r-merchant-icon').replaceChildren(merchantIcon(merchantKey || 'other', 24));
+  }
+  $('r-delete').addEventListener('click', () => { if (activeId) removeReceipt(activeId); });
+
+  /* ---------- merchants / pills ---------- */
+  async function loadMerchants() {
+    try {
+      const res = await fetch('/api/merchants');
+      if (!res.ok) return;
+      (await res.json()).merchants.forEach((m) => { merchants[m.key] = { name: m.name, icon: m.icon }; });
+      renderList();
+      renderMerchants();
+    } catch (_) { /* non-critical */ }
+  }
+
+  function renderMerchants() {
+    const byMerchant = (summary && summary.by_merchant) || {};
+    const keys = Object.keys(byMerchant).sort((a, b) => byMerchant[b].count - byMerchant[a].count);
+    const el = $('merchants-pills');
+    el.innerHTML = '';
+
+    const all = document.createElement('button');
+    all.className = 'pill' + (filterKey === 'all' ? ' active' : '');
+    all.innerHTML = 'All';
+    all.addEventListener('click', () => { filterKey = 'all'; renderMerchants(); renderList(); });
+    el.appendChild(all);
+
+    keys.forEach((key) => {
+      const pill = document.createElement('button');
+      pill.className = 'pill' + (filterKey === key ? ' active' : '');
+      const icon = document.createElement('span');
+      icon.appendChild(merchantIcon(key, 15));
+      const label = document.createElement('span');
+      label.textContent = (merchants[key] && merchants[key].name) || key;
+      const cnt = document.createElement('span');
+      cnt.className = 'cnt';
+      cnt.textContent = byMerchant[key].count;
+      pill.append(icon, label, cnt);
+      pill.addEventListener('click', () => { filterKey = key; renderMerchants(); renderList(); });
+      el.appendChild(pill);
+    });
+  }
+
+  /* ---------- data ---------- */
+  const historyEl = $('history');
+  const listCount = $('list-count');
+
   async function loadHistory() {
     try {
       const res = await fetch('/api/receipts');
       if (!res.ok) return;
-      const list = await res.json();
-      history.innerHTML = '<h3>Past receipts</h3>';
-      if (!list.length) {
-        history.innerHTML += '<p class="sub">No receipts stored yet.</p>';
-        return;
-      }
-      list.forEach((r) => {
-        const p = r.parsed || {};
-        const row = document.createElement('div');
-        row.className = 'hist-row';
-        row.innerHTML =
-          '<div class="hist-main">' +
-            '<span class="hist-name">' + escapeHtml(p.vendor || r.filename) + '</span>' +
-            '<span class="hist-date">' + escapeHtml(r.createdAt) + '</span>' +
-          '</div>' +
-          '<div class="hist-total">' + money(p.total) + ' ' + escapeHtml(p.currency || '') + '</div>';
-        row.addEventListener('click', () => renderSummary(p, true));
-        history.appendChild(row);
-      });
+      receipts = await res.json();
+      renderList();
     } catch (_) { /* non-critical */ }
   }
 
@@ -301,26 +829,21 @@
     try {
       const res = await fetch('/api/summary');
       if (!res.ok) return;
-      const data = await res.json();
-      const s = data.summary || {};
-      const currency = Object.keys(s.total || {})[0] || 'EUR';
-      const spent = (s.total && s.total[currency]) || 0;
-      const vendors = Object.entries(s.by_vendor || {})
-        .sort((a, b) => (b[1].total[currency] || 0) - (a[1].total[currency] || 0))
-        .slice(0, 3)
-        .map(([name, v]) =>
-          '<div class="stat">' + escapeHtml(name) + ' <b>' + money(v.total[currency]) + '</b></div>'
-        ).join('');
-      summaryBar.innerHTML =
-        '<div class="stat">Receipts <b>' + (s.count ?? 0) + '</b></div>' +
-        '<div class="stat">Total <b>' + money(spent) + '</b> ' + escapeHtml(currency) + '</div>' +
-        vendors;
-      summaryBar.classList.add('show');
+      const s = (await res.json()).summary || {};
+      summary = s;
+      const cur = Object.keys(s.total || {})[0] || 'EUR';
+      const spent = (s.total && s.total[cur]) || 0;
+      balanceText = money(spent, cur);
+      $('hero-sub').innerHTML =
+        '<b>−' + money(spent, cur).slice(1) + '</b> spent · ' + (s.count ?? 0) + ' receipts · ' + esc(cur);
+      refreshBalance();
+      renderMerchants();
     } catch (_) { /* non-critical */ }
   }
 
   loadSummary();
   loadHistory();
+  loadMerchants();
 </script>
 </body>
 </html>

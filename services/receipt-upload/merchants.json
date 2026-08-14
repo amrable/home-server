@@ -1,0 +1,12 @@
+{
+  "merchants": [
+    {"key": "ikea", "name": "IKEA", "aliases": ["ikea"], "icon": "ikea"},
+    {"key": "rewe", "name": "REWE", "aliases": ["rewe", "penny"], "icon": "rewe"},
+    {"key": "dm", "name": "dm", "aliases": ["dm", "dm-drogerie", "drogerie markt"], "icon": "dm"},
+    {"key": "lidl", "name": "Lidl", "aliases": ["lidl"], "icon": "lidl"},
+    {"key": "aldi", "name": "ALDI", "aliases": ["aldi"], "icon": "aldi-sud"},
+    {"key": "kaufland", "name": "Kaufland", "aliases": ["kaufland"], "icon": "kaufland"},
+    {"key": "amazon", "name": "Amazon", "aliases": ["amazon"], "icon": "amazon"},
+    {"key": "euronics", "name": "Euronics", "aliases": ["euronics", "media markt", "saturn"], "icon": "euronics"}
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "Ledger",
+    "slug": "ledger",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#FAFAFA",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.amrfahmy.ledgerapp",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Ledger uses your photos to parse receipts.",
+        "NSCameraUsageDescription": "Ledger uses your camera to capture receipts.",
+        "NSMicrophoneUsageDescription": false,
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FAFAFA",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Ledger uses your photos to parse receipts.",
+          "cameraPermission": "Ledger uses your camera to capture receipts.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "6c7e491e-ff0f-43be-aab3-88e9f9eae055"
+      }
+    }
+  }
+}

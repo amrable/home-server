@@ -15,6 +15,7 @@ services:
     volumes:
       - ./server.py:/app/server.py:ro
       - ./index.html:/app/index.html:ro
+      - ./merchants.json:/app/merchants.json:ro
       - ${DATA_PATH}/receipt-upload:/app/data
     networks:
       - homeserver
