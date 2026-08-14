@@ -1,4 +1,6 @@
 import json
+import os
+import re
 import sqlite3
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -9,8 +11,53 @@ import urllib.request
 DATA_DIR = Path('/app/data')
 DB_PATH = DATA_DIR / 'receipts.db'
 INDEX_HTML = Path('/app/index.html')
-N8N_WEBHOOK = 'http://n8n-app:5678/webhook/parse-receipt'
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
+GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
 MAX_BODY = 20 * 1024 * 1024
+
+PROMPT = """Extract the receipt data as strict JSON (no markdown, no extra text). Use this schema:
+{
+  "vendor": string,
+  "invoice_number": string,
+  "invoice_date": "YYYY-MM-DD",
+  "currency": string,
+  "items": [ { "name": string, "quantity": number, "unit_price": number, "total": number } ],
+  "subtotal": number,
+  "tax": [ { "rate_percent": number, "amount": number } ],
+  "total": number
+}
+Rules: "items" is a line-by-line breakdown of every purchased item. Include every VAT rate as a separate tax entry. Never guess - use null when a field cannot be determined."""
+
+
+def parse_with_gemini(req):
+    if not GEMINI_API_KEY:
+        raise RuntimeError('GEMINI_API_KEY is not set')
+    body = {
+        'contents': [{
+            'role': 'user',
+            'parts': [
+                {'text': PROMPT},
+                {'inline_data': {
+                    'mime_type': req.get('mimeType') or 'application/pdf',
+                    'data': req.get('data'),
+                }},
+            ],
+        }],
+        'generationConfig': {'response_mime_type': 'application/json'},
+    }
+    r = urllib.request.Request(
+        GEMINI_URL,
+        data=json.dumps(body).encode('utf-8'),
+        headers={'x-goog-api-key': GEMINI_API_KEY, 'Content-Type': 'application/json'},
+        method='POST',
+    )
+    with urllib.request.urlopen(r, timeout=120) as resp:
+        res = json.loads(resp.read().decode('utf-8'))
+    raw = res['candidates'][0]['content']['parts'][0]['text'].strip()
+    if raw.startswith('```'):
+        raw = re.sub(r'^```(?:json)?\s*', '', raw)
+        raw = re.sub(r'\s*```$', '', raw).strip()
+    return json.loads(raw)
 
 
 def get_db():
@@ -153,25 +200,17 @@ class Handler(BaseHTTPRequestHandler):
         conn = get_db()
 
         try:
-            r = urllib.request.Request(
-                N8N_WEBHOOK,
-                data=json.dumps(req).encode('utf-8'),
-                headers={'Content-Type': 'application/json'},
-                method='POST',
-            )
-            with urllib.request.urlopen(r, timeout=120) as resp:
-                result = json.loads(resp.read().decode('utf-8'))
+            parsed = parse_with_gemini(req)
         except urllib.error.HTTPError as e:
             detail = e.read().decode('utf-8', 'replace')[:500]
             conn.close()
-            self.send_json(json.dumps({'error': 'n8n failed', 'status': e.code, 'detail': detail}).encode('utf-8'), 502)
+            self.send_json(json.dumps({'error': 'gemini failed', 'status': e.code, 'detail': detail}).encode('utf-8'), 502)
             return
         except Exception as e:
             conn.close()
-            self.send_json(json.dumps({'error': 'n8n unreachable', 'detail': str(e)}).encode('utf-8'), 502)
+            self.send_json(json.dumps({'error': 'parse failed', 'detail': str(e)}).encode('utf-8'), 502)
             return
 
-        parsed = result.get('parsed', result)
         conn.execute(
             'INSERT INTO receipts (filename, result, mime_type) VALUES (?, ?, ?)',
             (filename, json.dumps(parsed), req.get('mimeType', '')),

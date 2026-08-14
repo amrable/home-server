@@ -10,6 +10,8 @@ services:
     restart: unless-stopped
     working_dir: /app
     command: python server.py
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
       - ./server.py:/app/server.py:ro
       - ./index.html:/app/index.html:ro
