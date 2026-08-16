@@ -1,4 +1,4 @@
-SERVICES = ocis jellyfin immich vaultwarden paperless n8n
+SERVICES = ocis jellyfin immich vaultwarden
 
 net:
 	docker network create homeserver 2>/dev/null || true

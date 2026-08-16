@@ -12,8 +12,6 @@ Each service runs behind its own Tailscale sidecar, reachable at a proper HTTPS 
 | [Jellyfin](https://jellyfin.org/) | Media server | `https://media.<tailnet-domain>` |
 | [Immich](https://immich.app/) | Photo and video backup | `https://photos.<tailnet-domain>` |
 | [Vaultwarden](https://github.com/dani-garcia/vaultwarden) | Self-hosted Bitwarden password manager | `https://vault.<tailnet-domain>` |
-| [Paperless-ngx](https://docs.paperless-ngx.com/) | Document management | `https://docs.<tailnet-domain>` |
-| [n8n](https://n8n.io/) | Workflow automation | `https://n8n.<tailnet-domain>` |
 
 ## Architecture
 
@@ -28,7 +26,6 @@ Your device (Tailscale client)
 │  media-ts  → serve 443 → http://jellyfin:8096             │
 │  photos-ts → serve 443 → http://immich:2283               │
 │  vault-ts  → serve 443 → http://vaultwarden:80            │
-│  docs-ts   → serve 443 → http://paperless:8000            │
 └───────────────────────────────────────────────────────────┘
 ```
 
@@ -99,19 +96,6 @@ DATA_PATH=/mnt/data          # where persistent data is stored on the host
 | `make down service=<name>` | Stop a single service |
 | `make update service=<name>` | Pull latest image and restart a service |
 | `make deploy` | Pull latest git changes and restart all services |
-
-## Paperless → n8n webhook
-
-When Paperless consumes a document it can POST a webhook into n8n, e.g. to trigger an OCR/AI/extraction workflow. Set it up once in the Paperless UI:
-
-1. **n8n**: create a workflow with a **Webhook** trigger node (path `paperless`, e.g. `POST /webhook/paperless`). Enable the workflow.
-2. **Paperless** → **Workflows** → **Add workflow**:
-   - Trigger: **Document added**
-   - Action: **Webhook**
-   - URL: `http://n8n-app:5678/webhook/paperless` (docker-internal, no TLS needed)
-   - Body: JSON, optionally using placeholders such as `{{ document.title }}`, `{{ document.id }}`
-
-No extra config is required: Paperless allows internal webhook requests by default, and both containers share the `homeserver` network.
 
 ## Connecting to Vaultwarden
 
