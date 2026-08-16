@@ -1,4 +1,4 @@
-SERVICES = ocis jellyfin immich vaultwarden
+SERVICES = ocis jellyfin immich vaultwarden planka
 
 net:
 	docker network create homeserver 2>/dev/null || true

@@ -12,10 +12,11 @@ Each service runs behind its own Tailscale sidecar, reachable at a proper HTTPS 
 | [Jellyfin](https://jellyfin.org/) | Media server | `https://media.<tailnet-domain>` |
 | [Immich](https://immich.app/) | Photo and video backup | `https://photos.<tailnet-domain>` |
 | [Vaultwarden](https://github.com/dani-garcia/vaultwarden) | Self-hosted Bitwarden password manager | `https://vault.<tailnet-domain>` |
+| [Planka](https://planka.app/) | Self-hosted Kanban boards | `https://boards.<tailnet-domain>` |
 
 ## Architecture
 
-All services run in Docker containers on a shared `homeserver` bridge network. Each service is paired with a **Tailscale sidecar container** that joins the tailnet as its own machine (`cloud`, `media`, `photos`, `vault`) and runs [`tailscale serve`](https://tailscale.com/kb/1312/serve): it terminates TLS with a real Let's Encrypt cert provisioned by Tailscale and reverse-proxies to its service over the docker network. No public ports, no IPs to remember, valid HTTPS everywhere (Bitwarden clients require it).
+All services run in Docker containers on a shared `homeserver` bridge network. Each service is paired with a **Tailscale sidecar container** that joins the tailnet as its own machine (`cloud`, `media`, `photos`, `vault`, `boards`) and runs [`tailscale serve`](https://tailscale.com/kb/1312/serve): it terminates TLS with a real Let's Encrypt cert provisioned by Tailscale and reverse-proxies to its service over the docker network. No public ports, no IPs to remember, valid HTTPS everywhere (Bitwarden clients require it).
 
 ```
 Your device (Tailscale client)
@@ -26,6 +27,7 @@ Your device (Tailscale client)
 │  media-ts  → serve 443 → http://jellyfin:8096             │
 │  photos-ts → serve 443 → http://immich:2283               │
 │  vault-ts  → serve 443 → http://vaultwarden:80            │
+│  boards-ts → serve 443 → http://planka:1337               │
 └───────────────────────────────────────────────────────────┘
 ```
 
@@ -82,6 +84,12 @@ IMMICH_DB_DATABASE=immich
 
 # Vaultwarden
 VAULTWARDEN_ADMIN_TOKEN=changeme
+
+# Planka
+PLANKA_SECRET_KEY=changeme
+PLANKA_DB_PASSWORD=changeme
+PLANKA_ADMIN_EMAIL=admin@example.com
+PLANKA_ADMIN_PASSWORD=changeme
 
 DATA_PATH=/mnt/data          # where persistent data is stored on the host
 ```

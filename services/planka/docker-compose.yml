@@ -1,0 +1,62 @@
+networks:
+  homeserver:
+    external: true
+    name: homeserver
+
+services:
+  planka:
+    image: ghcr.io/plankanban/planka:latest
+    container_name: planka
+    restart: unless-stopped
+    depends_on:
+      planka-postgres:
+        condition: service_healthy
+    environment:
+      BASE_URL: https://boards.${TAILNET_DOMAIN}
+      DATABASE_URL: postgresql://${PLANKA_DB_USERNAME}:${PLANKA_DB_PASSWORD}@planka-postgres/${PLANKA_DB_DATABASE}
+      SECRET_KEY: ${PLANKA_SECRET_KEY}
+      TRUST_PROXY: "true"
+      DEFAULT_ADMIN_EMAIL: ${PLANKA_ADMIN_EMAIL}
+      DEFAULT_ADMIN_PASSWORD: ${PLANKA_ADMIN_PASSWORD}
+      DEFAULT_ADMIN_NAME: ${PLANKA_ADMIN_NAME:-Admin}
+      DEFAULT_ADMIN_USERNAME: ${PLANKA_ADMIN_USERNAME:-admin}
+      OUTGOING_BLOCKED_HOSTS: localhost,planka-postgres,ocis,jellyfin,immich,immich-redis,immich-postgres,vaultwarden
+    volumes:
+      - ${DATA_PATH}/planka/data:/app/data
+    networks:
+      - homeserver
+
+  planka-postgres:
+    image: postgres:16-alpine
+    container_name: planka-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PLANKA_DB_DATABASE}
+      POSTGRES_USER: ${PLANKA_DB_USERNAME}
+      POSTGRES_PASSWORD: ${PLANKA_DB_PASSWORD}
+    volumes:
+      - ${DATA_PATH}/planka/db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PLANKA_DB_USERNAME} -d ${PLANKA_DB_DATABASE}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - homeserver
+
+  planka-ts:
+    image: tailscale/tailscale:stable
+    container_name: planka-ts
+    restart: unless-stopped
+    hostname: boards
+    depends_on:
+      - planka
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - ${DATA_PATH}/tailscale/boards:/var/lib/tailscale
+      - ./serve.json:/config/serve.json:ro
+    networks:
+      - homeserver
