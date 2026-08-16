@@ -5,7 +5,8 @@ networks:
 
 services:
   immich-server:
-    image: ghcr.io/immich-app/immich-server:release
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
+    container_name: immich
     restart: unless-stopped
     depends_on:
       - immich-redis
@@ -22,13 +23,15 @@ services:
       - homeserver
 
   immich-redis:
-    image: redis:6-alpine
+    image: valkey/valkey:9-alpine
+    container_name: immich-redis
     restart: unless-stopped
     networks:
       - homeserver
 
   immich-postgres:
-    image: tensorchord/pgvecto-rs:pg14-v0.2.0
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0
+    container_name: immich-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${IMMICH_DB_USERNAME}
@@ -36,5 +39,22 @@ services:
       POSTGRES_DB: ${IMMICH_DB_DATABASE}
     volumes:
       - ${DATA_PATH}/immich/db:/var/lib/postgresql/data
+    networks:
+      - homeserver
+
+  immich-ts:
+    image: tailscale/tailscale:stable
+    container_name: immich-ts
+    restart: unless-stopped
+    hostname: photos
+    depends_on:
+      - immich-server
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - ${DATA_PATH}/tailscale/photos:/var/lib/tailscale
+      - ./serve.json:/config/serve.json:ro
     networks:
       - homeserver

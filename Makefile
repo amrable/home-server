@@ -1,7 +1,9 @@
-SERVICES = nextcloud jellyfin immich vaultwarden caddy
+SERVICES = ocis jellyfin immich vaultwarden
 
-up-all:
-	docker network create homeserver || true
+net:
+	docker network create homeserver 2>/dev/null || true
+
+up-all: net
 	$(foreach s, $(SERVICES), docker compose --env-file .env -f services/$(s)/docker-compose.yml up -d;)
 
 down-all:

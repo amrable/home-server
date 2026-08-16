@@ -1,37 +1,38 @@
 # Home Server
 
-A self-hosted home server stack running on Docker, accessible securely over [Tailscale](https://tailscale.com/) with HTTPS via Caddy.
+A self-hosted server stack running on Docker (e.g. Hetzner), accessed privately over a [Tailscale](https://tailscale.com/) tailnet. Nothing is exposed to the public internet.
 
 ## Services
 
-| Service | Description | URL |
+Each service runs behind its own Tailscale sidecar, reachable at a proper HTTPS URL inside the tailnet:
+
+| Service | Description | URL (over Tailscale) |
 |---|---|---|
-| [Nextcloud](https://nextcloud.com/) | File storage and sync | `https://<domain>` |
-| [Jellyfin](https://jellyfin.org/) | Media server | `https://<domain>:8096` |
-| [Immich](https://immich.app/) | Photo and video backup | `https://<domain>:2283` |
-| [Vaultwarden](https://github.com/dani-garcia/vaultwarden) | Self-hosted Bitwarden password manager | `https://<domain>:8443` |
+| [OCIS](https://owncloud.com/infinite-scale/) | File storage and sync (ownCloud Infinite Scale) | `https://cloud.<tailnet-domain>` |
+| [Jellyfin](https://jellyfin.org/) | Media server | `https://media.<tailnet-domain>` |
+| [Immich](https://immich.app/) | Photo and video backup | `https://photos.<tailnet-domain>` |
+| [Vaultwarden](https://github.com/dani-garcia/vaultwarden) | Self-hosted Bitwarden password manager | `https://vault.<tailnet-domain>` |
 
 ## Architecture
 
-All services run in Docker containers on a shared `homeserver` bridge network. Caddy acts as a reverse proxy, terminating TLS using Tailscale-provisioned certificates. Access is restricted to the Tailscale network — no ports are exposed to the public internet.
+All services run in Docker containers on a shared `homeserver` bridge network. Each service is paired with a **Tailscale sidecar container** that joins the tailnet as its own machine (`cloud`, `media`, `photos`, `vault`) and runs [`tailscale serve`](https://tailscale.com/kb/1312/serve): it terminates TLS with a real Let's Encrypt cert provisioned by Tailscale and reverse-proxies to its service over the docker network. No public ports, no IPs to remember, valid HTTPS everywhere (Bitwarden clients require it).
 
 ```
-Tailscale network
+Your device (Tailscale client)
       │
       ▼
-   Caddy (443 / 8443)
-      │
-      ├── :443        → Nextcloud
-      ├── :8096       → Jellyfin
-      ├── :2283       → Immich
-      └── :8443       → Vaultwarden
+┌─ tailnet (MagicDNS: <name>.<tailnet-domain>) ─────────────┐
+│  cloud-ts  → serve 443 → http://ocis:9200                 │
+│  media-ts  → serve 443 → http://jellyfin:8096             │
+│  photos-ts → serve 443 → http://immich:2283               │
+│  vault-ts  → serve 443 → http://vaultwarden:80            │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ## Prerequisites
 
 - Docker & Docker Compose
-- A [Tailscale](https://tailscale.com/) account with [HTTPS enabled](https://tailscale.com/kb/1153/enabling-https/) for your tailnet
-- Tailscale TLS certificates placed at `/home/<user>/` on the host
+- A [Tailscale](https://tailscale.com/) account with **MagicDNS** and **HTTPS Certificates** enabled (admin console → **DNS**)
 
 ## Setup
 
@@ -44,30 +45,35 @@ Tailscale network
 2. **Configure environment**
    ```bash
    cp .env.example .env
-   # Edit .env with your values
+   # Set TS_AUTHKEY, TAILNET_DOMAIN, and passwords
    ```
 
-3. **Start all services**
+3. **Create a Tailscale auth key**
+   - In the Tailscale admin console → **Settings → Keys** → **Generate auth key**.
+   - Enable **Reusable** (required — each service runs its own tailscale machine).
+   - Copy the key into `TS_AUTHKEY` in `.env`.
+
+4. **Set your tailnet domain**
+   - Admin console → **DNS** → your tailnet's MagicDNS suffix (e.g. `tail80ea1b.ts.net`).
+   - Copy it into `TAILNET_DOMAIN` in `.env`.
+
+5. **Start all services**
    ```bash
    make up-all
    ```
+
+   Each sidecar registers itself in the tailnet and requests its cert automatically. First HTTPS hit per service may take a few seconds while the cert is provisioned.
 
 ## Configuration
 
 All configuration lives in `.env`. Copy `.env.example` to get started:
 
 ```env
-DOMAIN=your-tailscale-domain.ts.net
-DATA_PATH=/mnt/data          # where persistent data is stored on the host
+TS_AUTHKEY=tskey-auth-...
+TAILNET_DOMAIN=my-tailnet.ts.net
 
-# Nextcloud
-MYSQL_ROOT_PASSWORD=changeme
-MYSQL_DATABASE=nextcloud
-MYSQL_USER=nextcloud
-MYSQL_PASSWORD=changeme
-NEXTCLOUD_ADMIN_USER=admin
-NEXTCLOUD_ADMIN_PASSWORD=changeme
-NEXTCLOUD_TRUSTED_DOMAINS=your-tailscale-domain.ts.net
+# OCIS (all other secrets are auto-generated into config/ocis.yaml by `ocis init`)
+OCIS_ADMIN_PASSWORD=changeme
 
 # Immich
 IMMICH_DB_USERNAME=immich
@@ -76,12 +82,14 @@ IMMICH_DB_DATABASE=immich
 
 # Vaultwarden
 VAULTWARDEN_ADMIN_TOKEN=changeme
+
+DATA_PATH=/mnt/data          # where persistent data is stored on the host
 ```
 
 ## Makefile Commands
 
 | Command | Description |
-|---|---|
+|---------|-------------|
 | `make up-all` | Start all services |
 | `make down-all` | Stop all services |
 | `make up service=<name>` | Start a single service |
@@ -91,9 +99,9 @@ VAULTWARDEN_ADMIN_TOKEN=changeme
 
 ## Connecting to Vaultwarden
 
-Vaultwarden is API-compatible with Bitwarden. Use any official [Bitwarden client](https://bitwarden.com/download/) and point it at your self-hosted server:
+Point any [Bitwarden client](https://bitwarden.com/download/) at your self-hosted server, over Tailscale:
 
 1. Open the Bitwarden app or browser extension
 2. Click the gear icon on the login screen
-3. Set **Server URL** to `https://<your-domain>:8443`
+3. Set **Server URL** to `https://vault.<your-tailnet-domain>`
 4. Log in or create an account

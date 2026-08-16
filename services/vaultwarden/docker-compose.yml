@@ -6,13 +6,29 @@ networks:
 services:
   vaultwarden:
     image: vaultwarden/server:latest
+    container_name: vaultwarden
     restart: unless-stopped
-    ports:
-      - "8080:80"
     environment:
-      DOMAIN: https://${DOMAIN}:8443
+      DOMAIN: https://vault.${TAILNET_DOMAIN}
       ADMIN_TOKEN: ${VAULTWARDEN_ADMIN_TOKEN}
     volumes:
       - ${DATA_PATH}/vaultwarden:/data
+    networks:
+      - homeserver
+
+  vaultwarden-ts:
+    image: tailscale/tailscale:stable
+    container_name: vaultwarden-ts
+    restart: unless-stopped
+    hostname: vault
+    depends_on:
+      - vaultwarden
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - ${DATA_PATH}/tailscale/vault:/var/lib/tailscale
+      - ./serve.json:/config/serve.json:ro
     networks:
       - homeserver

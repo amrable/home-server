@@ -1,0 +1,55 @@
+networks:
+  homeserver:
+    external: true
+    name: homeserver
+
+services:
+  ocis:
+    image: ${OCIS_IMAGE:-owncloud/ocis:latest}
+    container_name: ocis
+    restart: unless-stopped
+    entrypoint: ["/bin/sh"]
+    # ocis init generates /etc/ocis/ocis.yaml with all secrets on first boot;
+    # it exits non-zero if the config already exists, hence "|| true".
+    command: ["-c", "ocis init --insecure yes || true; ocis server"]
+    environment:
+      OCIS_URL: https://cloud.${TAILNET_DOMAIN}
+      # Used by `ocis init` to set the admin login password (the docs'
+      # OCIS_ADMIN_PASSWORD is not actually read by oCIS). Only takes effect
+      # on a fresh init - i.e. after wiping ${DATA_PATH}/ocis/config.
+      IDM_ADMIN_PASSWORD: ${OCIS_ADMIN_PASSWORD:?Variable is not set or empty}
+      OCIS_LOG_LEVEL: ${OCIS_LOG_LEVEL:-info}
+      # oCIS always fetches $OCIS_URL/.well-known/openid-configuration from the
+      # PUBLIC URL to verify access tokens. TLS is therefore terminated twice:
+      # externally by the tailscale sidecar, and internally on :443 with the
+      # embedded self-signed certs (OCIS_INSECURE already trusts them). The
+      # public hostname is mapped to 127.0.0.1 so that internal fetch loops
+      # back to this container instead of failing DNS resolution (the .ts.net
+      # name does not resolve inside the Docker bridge network).
+      OCIS_INSECURE: "true"
+      PROXY_HTTP_ADDR: 0.0.0.0:443
+      PROXY_TLS: "true"
+    extra_hosts:
+      - "cloud.${TAILNET_DOMAIN}:127.0.0.1"
+    volumes:
+      - ${DATA_PATH}/ocis/config:/etc/ocis
+      - ${DATA_PATH}/ocis/data:/var/lib/ocis
+    networks:
+      - homeserver
+
+  ocis-ts:
+    image: tailscale/tailscale:stable
+    container_name: ocis-ts
+    restart: unless-stopped
+    hostname: cloud
+    depends_on:
+      - ocis
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - ${DATA_PATH}/tailscale/cloud:/var/lib/tailscale
+      - ./serve.json:/config/serve.json:ro
+    networks:
+      - homeserver

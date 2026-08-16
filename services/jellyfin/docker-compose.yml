@@ -6,9 +6,27 @@ networks:
 services:
   jellyfin:
     image: jellyfin/jellyfin:latest
+    container_name: jellyfin
     restart: unless-stopped
     volumes:
       - ${DATA_PATH}/jellyfin/config:/config
       - ${DATA_PATH}/media:/media
+    networks:
+      - homeserver
+
+  jellyfin-ts:
+    image: tailscale/tailscale:stable
+    container_name: jellyfin-ts
+    restart: unless-stopped
+    hostname: media
+    depends_on:
+      - jellyfin
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - ${DATA_PATH}/tailscale/media:/var/lib/tailscale
+      - ./serve.json:/config/serve.json:ro
     networks:
       - homeserver
